@@ -208,7 +208,7 @@ for name in $SESSIONS; do
     fi
 
     # What to feed standard input.  End of file unless the session says
-    # otherwise, which is what a script would give it.
+    # otherwise, as a script would give it.
     STDIN=/dev/null
     if [ -f "tests/sessions/$name.stdin" ]; then
         "$PYTHON" tests/expand.py "tests/sessions/$name.stdin" \

@@ -38,9 +38,9 @@ enum resource_type getrestype(const char *uri);
  * and lib/glob.c then asked again, once per member, through
  * davglob_stat().
  *
- * Only positive answers are kept.  A resource that could not be found
- * is the one case where the caller wants the session error that goes
- * with it, and the one that changes when a command creates something.
+ * Only positive answers are kept.  A caller that got resr_error wants
+ * the session error that goes with it, and that answer is also the one
+ * a command changes when it creates something.
  */
 
 /* Remembers that `uri_path' is `type'.  A no-op for resr_error. */

@@ -402,7 +402,7 @@ static int expand_dir(struct globctx *ctx, const char *prefix,
         int err = errno;
 
         /* A prefix that is not a directory is not an error: it simply
-         * contributes nothing, which is how a wildcard followed by a
+         * contributes nothing, so a wildcard followed by a
          * further segment behaves when some of the names it matched are
          * plain files rather than directories. */
         if (err == ENOTDIR) return 0;

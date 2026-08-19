@@ -44,12 +44,12 @@ Check it runs:
 ```
 
 ```
-cadaver 0.28-win2
-neon 0.37.1: Bundled build, Expat 2.8.3, LFS, OpenSSL 3.6.3 9 Jun 2026 (thread-safe).
+cadaver 0.28-win3
+neon 0.37.1: Bundled build, Expat 2.8.1, LFS, OpenSSL 3.6.3 9 Jun 2026 (thread-safe).
 readline 8.3
 ```
 
-Release tags look like `v0.28-win2`. The `0.28` is the upstream cadaver
+Release tags look like `v0.28-win3`. The `0.28` is the upstream cadaver
 version this fork tracks; the suffix counts releases of the fork against
 it. Every release bundles neon 0.37.1.
 
@@ -107,10 +107,10 @@ Or without autotools, using the configuration checked in at
 make -f Makefile.w32
 ```
 
-This needs only GNU make and a MinGW-w64 compiler whose sysroot has
-OpenSSL, expat, readline and iconv, which a UCRT64 shell already has. It
-is faster and has fewer moving parts, and it always builds with the
-warnings on.
+This needs GNU make, a MinGW-w64 compiler whose sysroot has OpenSSL,
+expat, readline and iconv, and `windres`, all of which a UCRT64 shell
+already has. It is faster and has fewer moving parts, and it always
+builds with the warnings on.
 
 To build an executable that runs on a machine with no MSYS2:
 
@@ -120,11 +120,10 @@ make -f Makefile.w32 STATIC=1
 
 That links the libraries in statically, so the result depends only on
 DLLs that ship with Windows. This is how the released binaries are
-built. It is correspondingly larger: 10146171 bytes (9.7 MiB) against
-1534462 bytes (1.5 MiB) dynamically linked, measured against OpenSSL
+built. It is correspondingly larger: 10218775 bytes (9.7 MiB) against
+1607929 bytes (1.5 MiB) dynamically linked, measured against OpenSSL
 3.6.3, expat 2.8.1 and readline 8.3. Expect a different exact figure
-from a different toolchain: the 0.28-win2 release, built by CI against
-expat 2.8.3, is 10125933 bytes (9.7 MiB).
+from a different toolchain.
 
 If those libraries live outside the toolchain, point `PREFIX` at a
 sysroot providing all four:
@@ -217,9 +216,10 @@ the credentials in the clear.
 | `ls [path]` | List the current or a named collection |
 | `cd path` | Change collection; `cd -` returns to the previous one |
 | `pwd`, `lpwd` | Print the current remote or local directory |
-| `lcd [dir]`, `lls [-l] [dir]` | Change or list the local directory |
+| `lcd [dir]`, `lls [-a] [-l] [dir]` | Change or list the local directory |
 | `put local [remote]`, `mput local...` | Upload |
 | `get remote [local]`, `mget remote...` | Download |
+| `rput local [remote]`, `rget remote [local]` | Upload or download a whole tree |
 | `resumeget remote [local]` | Resume a download into an existing local file |
 | `cat remote...`, `less remote...` | Display a resource, directly or through a pager |
 | `head remote` | Show the status and headers of a `HEAD` |
@@ -232,12 +232,61 @@ the credentials in the clear.
 | `chexec + remote` | Set the Apache `executable` property |
 | `search query` | DASL search |
 | `version`, `checkin`, `checkout`, `uncheckout`, `history`, `label` | DeltaV |
+| `bench [size [count]]` | Measure the round trip time and the transfer rate |
 | `set`, `unset`, `describe` | Options; `set` on its own lists them |
 | `open URL`, `close`, `logout` | Connect, disconnect, forget credentials |
 | `about`, `help`, `quit` | |
 
 `rm`, `mkdir`, `mv`, `cp` and `more` are aliases for `delete`, `mkcol`,
 `move`, `copy` and `less`; `exit` and `bye` are aliases for `quit`.
+
+### Recursive transfer
+
+`rput` uploads a directory and everything under it, creating a
+collection per directory. `rget` does the reverse, one `PROPFIND` per
+collection, creating the local directories as it goes.
+
+```bash
+rput C:\work\outbox uploads
+rget uploads C:\work\inbox
+```
+
+A collection that is already there is not an error. Either command
+given a plain resource rather than a directory or a collection does what
+`put` or `get` would have done. Both refuse to go more than 64 levels
+deep, so a junction or a symbolic link that makes a directory contain
+itself is not walked forever.
+
+### Ctrl-C
+
+Ctrl-C during a transfer abandons it and returns to the prompt; the
+local file a download was writing is removed, and a partly uploaded
+resource is the server's to clean up. A second Ctrl-C during the same
+transfer ends the session, which is the way out of one that has stalled
+so completely that no block arrives to check the first. Ctrl-C at the
+prompt ends the session, as it always did.
+
+### Measuring a server
+
+`bench` writes a generated payload into the current collection, reads it
+back and deletes it, and reports the round trip time of a `PROPFIND` and
+the rate each direction moved at:
+
+```
+dav:/dav/> bench
+Benchmarking `/dav/': succeeded.
+  started    2026-08-19T16:12:03.114Z
+  payload    1048576 bytes (1.0 MiB), 3 iterations
+  PROPFIND   min 1.204 ms, median 1.431 ms, max 3.102 ms over 3 samples
+  upload     3145728 bytes (3.0 MiB) in 0.412 s wall clock, 7.63 MiB/s
+  download   3145728 bytes (3.0 MiB) in 0.298 s wall clock, 10.55 MiB/s
+```
+
+`bench SIZE COUNT` changes the payload and how many times each part is
+repeated; SIZE takes a K, M or G suffix, all powers of 1024. Durations
+are wall clock, so they include server and network time. The payload
+goes to `cadaver-bench.dat`, which is deleted afterwards; a resource
+already under that name is left alone and the command refuses.
 
 ### Wildcards
 
@@ -252,9 +301,11 @@ copy 2026-*/report.pdf archive
 ```
 
 A remote expansion costs one `PROPFIND` per collection it has to look
-inside, and Ctrl-C interrupts it. Matching is case-insensitive against
-the local file system on Windows and case-sensitive against a server,
-which is what each of them does with names.
+inside, and Ctrl-C interrupts it. What that listing says about each
+member is remembered for the rest of the command, so the commands that
+follow do not ask again. Matching is case-insensitive against the local
+file system on Windows and case-sensitive against a server, as each of
+them treats names.
 
 ### Scripting
 
@@ -267,11 +318,12 @@ printf 'ls\nquit\n' | cadaver http://dav.example.com/path/
 ```
 
 `#` starts a comment, and single or double quotes group an argument
-containing spaces. On Windows a backslash is an ordinary character,
+containing spaces. A quote quotes only where it opens an argument;
+inside one it is an ordinary character, so `set lockowner foo"bar` sets
+what it looks like. On Windows a backslash is an ordinary character too,
 because it is the path separator: `lcd C:\Users\me` reaches `chdir`
-intact, and a name containing a space or a `#` is written in quotes
-rather than with backslashes. Elsewhere a backslash quotes the
-character after it, as a shell does.
+intact. Elsewhere a backslash quotes the character after it, as a shell
+does.
 
 The exit status is 0 if every command succeeded and the number that
 failed otherwise, so a script can branch on it without reading anything.
@@ -297,7 +349,8 @@ login, and only the password is asked for.
 ## Options
 
 `set` with no argument lists them, `describe NAME` explains one, and
-`set NAME VALUE` changes one.
+`set NAME VALUE` changes one. A boolean takes `on` or `off`, or no value
+at all to turn it on; `unset NAME` turns it off.
 
 | Option | Effect |
 | --- | --- |
@@ -308,6 +361,7 @@ login, and only the password is asked for.
 | `quiet` | Whether to print connection progress |
 | `keepalive` | Persistent connections |
 | `editor`, `pager` | Programs for `edit` and `less` |
+| `lsformat` | Layout of one line of an `ls` listing |
 | `namespace` | XML namespace for `propget` and `propset` |
 | `clobber` | What `get` does when the local file exists: `ask`, `yes` or `no` |
 | `lockowner`, `lockscope`, `lockdepth`, `lockstore` | Locking |
@@ -315,6 +369,36 @@ login, and only the password is asked for.
 | `proxy`, `proxy-port`, `systemproxy` | Proxy |
 | `searchall`, `searchdepth`, `searchorder`, `searchdorder` | DASL search |
 | `debug` | Protocol tracing; see below |
+
+### `set lsformat`
+
+One line of an `ls` listing is a format string: a `%`, an optional `-`
+for left alignment, an optional field width, and one letter.
+
+| | | | |
+| --- | --- | --- | --- |
+| `%n` | name | `%h` | full path |
+| `%s` | size in bytes | `%S` | size rounded, powers of 1024 |
+| `%d` | modified, local time | `%D` | modified, ISO 8601 UTC |
+| `%t` | `Coll:` or `Ref:` | `%T` | `collection`, `resource`, `reference` |
+| `%e` | `*` if executable | `%v` | `>` or `<` if version-controlled |
+| `%%` | a literal `%` | | |
+
+Anything else is written as it stands, and so is a letter that means
+nothing, so a mistake shows up in the listing. `describe lsformat`
+prints the same table. The default is
+`%5t %v%e%-29n %10s  %d`, and `unset lsformat` returns to it.
+
+```
+dav:/dav/> set lsformat "%T %-30n %8S %D"
+dav:/dav/> ls
+Listing collection `/dav/': succeeded.
+collection reports                          0 B 2026-08-19T09:41:02Z
+resource   report.pdf                   86.1 KiB 2026-08-19T10:01:55Z
+```
+
+A member the server could not report on keeps its own line: it has a
+status and a reason and none of the fields a format can name.
 
 ### `set debug`
 
@@ -343,14 +427,15 @@ Five harnesses, cheapest first. `make check` runs all of them.
 ./tests/offline.sh
 ```
 
-41 checks that need no server, no network and no Python: that the
+61 checks that need no server, no network and no Python: that the
 executable reports the version in `VERSION`, that the usage message and
 the option errors are right, that the exit status counts what failed,
-that `--json` puts one object on standard output and nothing else, and
-that a closed standard input ends the session rather than hanging. It
-also greps `src/` for a write to standard output that does not go
-through `src/output.c`, which is the one rule that keeps `--json` a
-document rather than a document with a stray line in it. Under a second.
+that `--json` puts one object on standard output and nothing else, that
+an option refuses a value it does not know, how the tokeniser splits a
+line, and that a closed standard input ends the session rather than
+hanging. It also greps `src/` for a write to standard output that does
+not go through `src/output.c`, in three shapes: the printf family, a
+stdio call naming stdout, and a write to the descriptor. Under a second.
 
 ```bash
 ./tests/glob.sh
@@ -358,28 +443,30 @@ document rather than a document with a stray line in it. Under a second.
 ```
 
 Unit tests for `lib/glob.c` and `lib/netrc.c`, compiled on the spot
-against `win32/config.h`. The globbing ones mostly run the matcher
-against a synthetic directory tree through the `GLOB_ALTDIRFUNC`
-callbacks, so they behave the same everywhere; the rest create a real
-directory, because that path resolves names differently on Windows. The
-`.netrc` ones write a file and read it back, because what that parser
-gets wrong is invisible in use: a password it mangles produces an
-authentication failure that names neither the file nor the character.
+against `win32/config.h`: 48 and 26 checks. The globbing ones mostly run
+the matcher against a synthetic directory tree through the
+`GLOB_ALTDIRFUNC` callbacks, so they behave the same everywhere; the
+rest create a real directory, because that path resolves names
+differently on Windows. The `.netrc` ones write a file and read it back:
+what that parser gets wrong is invisible in use, because a password it
+mangles produces an authentication failure that names neither the file
+nor the character.
 
 ```bash
 ./tests/godav.sh
 ./tests/wsgidav.sh
 ```
 
-Scripted sessions run against a real WebDAV server, with the transcript
-compared line for line against `tests/expected/`, and the exit status
-pinned on the last line of each. Each session gets a collection of its
-own, created through the server, so one cannot leave anything behind
-that another trips over. `tests/normalise.py` replaces the parts that
-legitimately differ between runs: timestamps, lock tokens, etags, the
-port, the random half of a temporary file name. A session run with
-`--json` is parsed and pretty-printed rather than compared as text, so
-output that is not well-formed JSON fails outright.
+24 scripted sessions run against a real WebDAV server, with the
+transcript compared line for line against `tests/expected/`, and the
+exit status pinned on the last line of each. Each session gets a
+collection of its own, created through the server, so one cannot leave
+anything behind that another trips over. `tests/normalise.py` replaces
+the parts that legitimately differ between runs: timestamps, lock
+tokens, etags, the port, the random half of a temporary file name, and
+what `bench` measured. A session run with `--json` is parsed and
+pretty-printed rather than compared as text, so output that is not
+well-formed JSON fails outright.
 
 A session is `tests/sessions/NAME.cad`, and may bring a `.flags` file of
 extra command-line arguments, a `.home` holding a `.netrc`, a `.stdin`
@@ -391,12 +478,13 @@ transcript cannot show.
 change. Read the diff before committing it: the point of those files is
 that a change in behaviour has to be looked at.
 
-Neither test server is complete, which is why both are used:
+Neither test server is complete, so both are used:
 
 * [x/net/webdav](https://pkg.go.dev/golang.org/x/net/webdav), from the
   Go source in `tests/godav`, locks correctly but has no dead property
   store, so most of the `props` session fails against it. It needs a Go
-  toolchain and, on the first run, network access.
+  toolchain and, on the first run, network access. `tests/godav/deltav.go`
+  adds DASL and DeltaV in front of it, and four sessions run only there.
 * [wsgidav](https://github.com/mar10/wsgidav) has a dead property store,
   so `props` is meaningful there, but it answers `LOCK` with the
   `Content-Type` `application; charset=utf-8`, which is not a media
@@ -415,7 +503,7 @@ skips over it; if it cannot find another, say where one is:
 PYTHON=/c/Python313/python.exe ./tests/wsgidav.sh
 ```
 
-CI runs all four on every push, for both build paths and for the static
+CI runs all five on every push, for both build paths and for the static
 build.
 
 ## Windows notes
@@ -424,6 +512,13 @@ build.
 `libexpat` in `/mingw64/bin`. If those come first on `PATH` they shadow
 the ones a dynamically linked build was built against. Put `ucrt64/bin`
 first, or build with `STATIC=1`.
+
+**The application manifest.** `win32/cadaver.manifest` makes UTF-8 the
+process code page, so that the narrow Windows and C runtime calls in
+`lib/system.c` read the UTF-8 paths cadaver hands them. Without it a
+path with a character the active ANSI code page cannot hold names
+something else or nothing at all. Windows 10 version 1903 and later read
+the setting; an older Windows ignores it.
 
 **`win32/config.h` is generated.** It is the output of `configure`,
 checked in so `Makefile.w32` works without autotools.

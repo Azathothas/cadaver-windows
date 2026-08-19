@@ -77,12 +77,11 @@ struct command {
     } scope; /* where a wildcard in an argument is expanded */
     /* What each argument completes to, one letter per argument: `r'
      * remote, `l' local, `o' an option name, `n' nothing.  The last
-     * letter covers every further argument, which is what a command
-     * taking a list of them needs.  Separate from `scope' above because
-     * a command can take one argument of each kind -- `get remote
-     * local' -- and because widening where a wildcard is expanded would
-     * change what those commands do rather than only what they
-     * offer. */
+     * letter covers every further argument, so a command taking a list
+     * of them needs one letter.  Separate from `scope' above because a
+     * command can take one argument of each kind, as `get remote local'
+     * does, and because widening where a wildcard is expanded would
+     * change what those commands do and not only what they offer. */
     const char *completes;
     union {
 	void (*take0)(void);

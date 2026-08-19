@@ -52,12 +52,18 @@ local file report.
 
 -> How do I see what is actually being sent?
 
-  dav:/> set debug http
+  cadaver --trace=wire.log -r commands.txt URL
 
-which writes neon's protocol trace to standard error. Add `xml' to see
-the request and response bodies for PROPFIND, PROPPATCH and LOCK, or
-`httpbody' to see every body. `cleartext' also shows credentials, so
-do not paste that output anywhere.
+dumps every request and response to wire.log, tagged with the command
+that issued it, so grepping the log for a command finds the exchange it
+caused. Without a filename it goes to standard error. --verbose widens
+it to everything neon reports.
+
+Inside a session, `set debug http' turns the older neon trace on part
+way through. Add `xml' to see the request and response bodies for
+PROPFIND, PROPPATCH and LOCK, or `httpbody' to see every body.
+`cleartext' also shows credentials, so do not paste that output
+anywhere.
 
 
 -> Why doesn't the "edit" command work with gvim / VS Code / Notepad++?
@@ -108,5 +114,65 @@ be done from the client side.
 
 -> Is there a recursive get or put?
 
-Not yet. It is in TODO. `mget *' and `mput *' work within one
-collection.
+Yes: `rput' uploads a directory and everything under it, creating a
+collection per directory, and `rget' does the reverse, creating the
+local directories as it goes.
+
+  rput C:\work\outbox uploads
+  rget uploads C:\work\inbox
+
+A collection that is already there is not an error. Either one given a
+plain resource does what `put' or `get' would have done. Both stop at
+a Ctrl-C.
+
+
+-> Ctrl-C during a large transfer kills cadaver.
+
+Not in this fork. The first one abandons the transfer and returns to
+the prompt; a download leaves no local file behind, and a partly
+uploaded resource is the server's to clean up. A second Ctrl-C during
+the same transfer does end the session, which is the way out of one
+that has stalled completely.
+
+Ctrl-C at the prompt ends the session, as it always did.
+
+
+-> How fast is my server?
+
+  dav:/dav/> bench
+
+writes a generated payload into the current collection, reads it back
+and deletes it, and reports the round trip time of a PROPFIND and the
+rate each direction moved at. `bench 4M 10' changes the payload size
+and the number of repetitions. Rates are MiB/s and durations are wall
+clock, so they include server and network time.
+
+It writes to cadaver-bench.dat in the current collection, so point it
+at somewhere you are willing to have written to. A resource already
+under that name is left alone and the command refuses.
+
+
+-> A file whose name is not in my code page cannot be uploaded.
+
+That works in this fork. The executable carries an application
+manifest that makes UTF-8 the process code page, so the narrow Windows
+and C runtime calls read the UTF-8 paths cadaver hands them. Windows
+10 version 1903 and later honour it.
+
+An older Windows ignores the manifest, and there a path with a
+character the active ANSI code page cannot hold still fails.
+
+
+-> How do I change what `ls' prints?
+
+  dav:/dav/> set lsformat "%T %-30n %8S %D"
+
+A conversion is a %, an optional - for left alignment, an optional
+field width, and one letter: %n the name, %h the full path, %s the
+size in bytes, %S the size rounded in powers of 1024, %d the
+modification time in local form, %D the same as ISO 8601 UTC, %t the
+Coll: marker, %T the type as a word, %e the executable flag, %v the
+version-control state, %% a literal %.
+
+`describe lsformat' prints the same list, and `unset lsformat' returns
+to the default.

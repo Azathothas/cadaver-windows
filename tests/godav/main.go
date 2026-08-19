@@ -9,9 +9,8 @@
 // locking.  x/net/webdav implements locking, including the RFC 4918
 // section 7.3 treatment of a LOCK on an unmapped URL.
 //
-// It has gaps of its own -- no dead properties, so the props session
-// fails against it -- which is exactly why neither server alone is
-// enough.
+// It has gaps of its own: no dead properties, so the props session
+// fails against it.  Neither server alone is enough.
 //
 // -authprefix puts HTTP Basic authentication in front of one subtree,
 // so that the sessions which check the .netrc handling have somewhere

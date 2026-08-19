@@ -6,7 +6,7 @@ If you are picking it up cold, read these in order:
 
   1. README.md    what this fork is, how to build it, how to run it
   2. AGENTS.md    how to drive cadaver from a program, and how to read
-                  what it prints back -- including the --json contract
+                  what it prints back, including the --json contract
   3. PATCHES.md   what was changed inside neon/ and why, needed before
                   you update the bundled neon
   4. This file    what is left to do
@@ -18,9 +18,10 @@ Layout:
                   (cadaver.c), the tokeniser and glob driver
                   (cmdline.c), options (options.c), listings (ls.c),
                   the edit command (edit.c), DASL search (search.c),
-                  DeltaV (version.c), and output.c, which decides where
-                  everything cadaver prints goes and records how each
-                  command went
+                  DeltaV (version.c), interruptible transfers
+                  (transfer.c), the bench command (bench.c), and
+                  output.c, which decides where everything cadaver
+                  prints goes and records how each command went
   lib/            portability: the platform layer (system.c), filename
                   globbing (glob.c), the password prompt (getpass.c),
                   temporary files (mkstemp.c), .netrc (netrc.c)
@@ -28,6 +29,9 @@ Layout:
                   Patched; see PATCHES.md
   win32/config.h  generated config.h, checked in so Makefile.w32 works
                   without autotools.  win32/regen-config.sh rewrites it
+  win32/cadaver.manifest
+                  the application manifest, which makes UTF-8 the
+                  process code page; win32/cadaver.rc embeds it
   VERSION         the fork version, read by both build paths
   tests/          the five test harnesses and their expected output
   Makefile.w32    the no-autotools build
@@ -43,16 +47,17 @@ Everything is one executable:
 
 Test harnesses in tests/:
 
-  offline.sh      43 checks that need no server, no network and no
+  offline.sh      61 checks that need no server, no network and no
                   Python.  Run it first; it takes under a second.  It
                   also greps src/ for a write to standard output that
-                  does not go through output.c, which is the one rule
-                  that keeps --json a document rather than a document
-                  with a stray line in it.
+                  does not go through output.c, in three shapes: the
+                  printf family, a stdio call naming stdout, and a
+                  write to the descriptor.
   glob.sh         48 unit tests for lib/glob.c, compiled on the spot.
   netrc.sh        26 unit tests for lib/netrc.c, likewise.  What that
-                  parser gets wrong is invisible in use, which is how
-                  upstream #75 survived four years.
+                  parser gets wrong is invisible in use: a password it
+                  mangles produces an authentication failure that names
+                  neither the file nor the character.
   godav.sh        the scripted sessions against golang.org/x/net/webdav
   wsgidav.sh      the same sessions against wsgidav
   session.sh      the driver both of those call: runs each
@@ -60,16 +65,22 @@ Test harnesses in tests/:
                   against tests/expected/<server>/
   normalise.py    replaces the parts of a transcript, or of a --json
                   document, that legitimately differ between runs
+  bench_check.py  checks the numbers `bench' reported against what it
+                  was asked to do, in the raw transcript, before
+                  normalise.py replaces them
   expand.py       substitutes the paths into a session script
 
-A session is tests/sessions/NAME.cad, and may bring:
+There are 24 sessions.  A session is tests/sessions/NAME.cad, and may
+bring:
 
   NAME.flags      extra arguments for the cadaver command line
   NAME.home       a .netrc, in a home directory of the session's own
   NAME.stdin      what to feed standard input
   NAME.servers    the servers it applies to, one per line
-  NAME.check      a shell snippet run afterwards with $WORK set, for
-                  what a transcript cannot show
+  NAME.check      a shell snippet run afterwards with $WORK set to the
+                  working directory and $RAW to the transcript before
+                  normalise.py touched it, for what a transcript cannot
+                  show or has had replaced
 
 Every session's exit status is pinned on the last line of its
 transcript, because that is the thing a script branches on and a
@@ -80,9 +91,11 @@ Neither test server is complete, and the difference matters:
   * x/net/webdav locks correctly, including a LOCK on an unmapped URL,
     but has no dead property store, so most of the props session fails
     against it.  tests/godav.sh also puts authentication in front of one
-    subtree and makes another ignore Range, because no real server here
-    does either; the two netrc sessions and the norange one run only
-    there.
+    subtree, makes another ignore Range, and paces the body under a
+    third, because no real server here does any of those.
+    tests/godav/deltav.go adds DASL and DeltaV in front of it, which
+    x/net/webdav does not implement at all.  Four sessions run only
+    there: netrc, netrclogin, norange and deltav.
   * wsgidav has a dead property store, so props is meaningful there,
     but it answers LOCK with the Content-Type "application;
     charset=utf-8", which is not a media type.  neon discards the body
@@ -113,7 +126,7 @@ Both build paths must stay warning-free:
   make -f Makefile.w32
 
 CI greps the build log for "warning:" and fails on a hit, so a new
-warning is a regression rather than background noise.
+warning is a regression and not background noise.
 
 Conventions, in code and in prose:
 
@@ -127,15 +140,17 @@ Conventions, in code and in prose:
     stamp never names a moment that had not happened yet.
   * Durations are seconds to millisecond resolution, and are
     wall-clock.  Say so when reporting them, because they include
-    server and network time.
+    server and network time.  A duration that reads as 0.000 seconds
+    supports no rate; `bench' reports null there.
   * Quote exact byte counts where the exact figure matters, with the
     rounded binary figure in brackets after it.
   * The version lives in VERSION and nowhere else.  win32/config.h
     deliberately has no copy of it.
-  * Nothing in src/ calls printf, putchar or puts.  Everything goes
-    through out_printf() and friends in src/output.c, because with
-    --json standard output carries the result document and one stray
-    write would corrupt it.  tests/offline.sh checks.
+  * Nothing in src/ calls printf, putchar or puts, names stdout, or
+    writes to the standard output descriptor.  Everything goes through
+    out_printf() and friends in src/output.c, because with --json
+    standard output carries the result document and one stray write
+    would corrupt it.  tests/offline.sh checks all three shapes.
 
 If you change what cadaver prints, the expected transcripts have to
 move with it:
@@ -150,92 +165,86 @@ change in behaviour has to be looked at by a person.
 High value work
 ===============
 
-In rough order.
+In rough order.  Everything above this line is done; what follows is
+what a next session would start on.
 
-* No recursive upload or download.  `rget' and `rput', creating
-  collections as needed, are the most-requested missing feature and the
-  reason people reach for sitecopy or rclone instead.  `mput *' on a
-  directory now says what it is rather than blaming the permissions,
-  which is honest but is not the feature.
+* A third test server.  tests/godav/deltav.go answers SEARCH and the
+  DeltaV methods well enough to exercise cadaver's client end, but it
+  is not an implementation of RFC 3253 or RFC 5323 and does not try to
+  be: version state lives in memory, REPORT understands only
+  DAV:version-tree, and there is no version resource to GET.  A real
+  DeltaV server would find things this cannot.  Apache httpd with
+  mod_dav and mod_dav_fs would cover DeltaV badly and DASL not at all.
 
-* Ctrl-C during a transfer kills cadaver.  It should abort the transfer
-  and return to the prompt.  The signal handler in src/cadaver.c exits
-  unless a child is running; neon has no cancel call, so this needs the
-  read callback to return an error, which means a flag the transfer
-  loop checks.  Interrupting a remote wildcard expansion already works
-  this way -- see interrupt_state in src/cmdline.c.
+* `search' and `history' have no structured field under --json.  Every
+  other command that produces data has one -- listing, properties,
+  headers, locks, options, benchmark -- and these two put their results
+  in the "output" array as text.  A consumer has to parse prose to read
+  a search result, which is the thing --json exists to avoid.  The
+  parsers in src/search.c and src/version.c already have the data in
+  structures; res_*() calls in the display functions would be most of
+  the work.
 
-* `copy' and `move' over an existing resource fail with 412 rather than
-  prompting or reporting clearly.  The `overwrite' option decides
-  whether the Overwrite header is T or F; a 412 back from F deserves a
-  message saying that the destination exists and that `set overwrite
-  on' is how to replace it.
-
-* A resource-state cache for the duration of one command.  cadaver
-  makes a PROPFIND to decide whether a path is a collection, and does
-  it repeatedly within one command: `copy a b c dest' resolves the
-  destination once and every source separately.  A small hash keyed by
-  URI, discarded at the end of each command, would cut the request
-  count noticeably on a slow link.  uri_resolve_native_true() in
-  src/commands.c is the one place that asks.
-
-* `ls' is inflexible: one format, one collection at a time, no way to
-  choose which properties are shown.  --json now covers the machine
-  side of this, so what is left is a `set lsformat' for a person.
-
-* DASL search and the DeltaV commands are exercised by neither test
-  server, because neither implements them.  They are compiled and
-  linked and otherwise unverified.  A third test server that does would
-  be the way to cover them; until then, treat any change there as
-  untested.  Apache httpd with mod_dav and mod_dav_fs would cover
-  DeltaV badly and DASL not at all, so this probably means writing one,
-  the way tests/godav is written.
+* `set lsformat' covers the remote listing.  `lls' still has one
+  layout, and there is no way to sort a listing other than the way
+  ls.c does it: errors first, then collections, then by URI.
 
 * Upload on save from the editor, so that `edit' with a long-running
-  editor pushes each save rather than only the final one.  Requested in
-  2001 and never done; a file watcher would do it now.
+  editor pushes each save rather than only the final one.  Requested
+  upstream in 2001 and never done.  It needs a file watcher and a
+  second thread, or a poll loop that also reads the keyboard, and it
+  changes `edit' from a command that finishes into one that runs until
+  told to stop.  Not started.
+
+* Long paths.  The application manifest makes UTF-8 the process code
+  page; it does not set longPathAware, so a path over MAX_PATH still
+  fails.  `rget' of a deep tree is the way to meet this.  The setting
+  needs a registry opt-in on the machine as well, and some C runtime
+  entry points ignore it, so it wants testing rather than adding.
 
 Smaller things
 ==============
 
-* Failure paths leak.  Most commands build URLs with ne_concat and
-  return early without freeing them.  It is memory only, in a process
-  that is about to read another command rather than exit, so a long
-  session with many failures grows.  Cleaning it up properly means a
-  cleanup path per command.
+* A failure path can still leak.  The two that mattered are fixed:
+  run_search() used to leave the request, the XML parser, the body
+  buffer and both property lists behind on every search that did not
+  work, and execute_chexec() leaked the URL when the first argument was
+  not + or -.  What is left is one ne_concat of a URL, tens of bytes at
+  a time, in a process that goes on to read another command.  Nothing
+  looks for these; both were found by reading the failure paths.
 
-* `lls' accepts only -l.  It is cadaver's own listing now rather than a
-  forked ls, so anything else -- -a, -t, -S -- has to be implemented
-  rather than passed on.  -a is the one worth having: the listing hides
-  nothing today, so -a would have to become the non-default.
+* --json records are never freed.  Deliberate: they are the document,
+  and the process exits after writing it.
 
-* The progress indicator prints one dot per transfer callback when the
-  output is not a terminal, so a large transfer produces a line of
-  hundreds of dots in a log.  --json suppresses it entirely and
-  tests/normalise.py collapses it for the expected transcripts.
-  Consider a byte count instead when the output is not a terminal.
+* `lls' accepts -a and -l.  Anything else -- -t, -S, -r -- would have
+  to be implemented, because this is cadaver's own listing rather than
+  a forked ls.
 
-* `set searchdepth' silently accepts anything it does not recognise and
-  treats it as infinity, where every other option with a fixed set of
-  values says so and fails.
+* The progress indicator writes a byte count when the output is not a
+  terminal, and a line every ten seconds during a long transfer.  There
+  is no rate in it: `bench' is where a rate comes from.
+
+* A signal that ends the session writes no --json document.  Producing
+  one from a handler is not safe and a session cut short has no result
+  to report, so AGENTS.md and the manual page say so instead.  Ctrl-C
+  during a transfer no longer ends the session, which was the case that
+  made this bite.
 
 * The completion scope is a string in the command table, one letter per
   argument.  The globbing scope is still one value for the whole
-  command, which is why `put *.txt' does not expand and `mput *.txt'
-  does.  Making globbing per-argument as well would be consistent, but
-  it would change what `put *.txt' does, so it wants a release note
-  rather than a quiet fix.
+  command, so `put *.txt' does not expand and `mput *.txt' does.  See
+  the note below on why that stays.
 
-* An option name completes after `set' and `describe' according to the
-  table, but nothing implements it: completion() in src/cadaver.c has
-  parmscope_option falling through to no matches.  A generator over the
-  options table is a dozen lines.
+* Upstream's `search' pages its results with a raw fgetc(stdin) every
+  ten lines, which in a script eats a command from the input.  Nothing
+  exercises it: no session produces ten results.
 
 Inherited upstream issues
 =========================
 
-Every open issue in notroj/cadaver at the time of the fork.  All five
-that were bugs are fixed here; upstream has not moved on any of them.
+Every open issue in notroj/cadaver, checked again on 2026-08-19: the
+list has not changed since the fork, and upstream has not moved on any
+of them.  All five that were bugs are fixed here.
 
 * #75, netrc parser removes single quote from value (open since
   2026-04-27).  FIXED in 0.28-win2.  lib/netrc.c treated a quote as
@@ -274,22 +283,44 @@ that were bugs are fixed here; upstream has not moved on any of them.
   report itself as a collection", and the second says so and points at
   -t.
 
-* #58 is not a bug report; it is an offer of help from a university
+* #58 is not a bug report.  It is an offer of help from a university
   open source programme office.  Nothing to do.
 
 Upstream pull requests
 ======================
 
-* #74, "Misc changes", open.  Two of its three parts are taken: the
-  neon update to 0.37.1 and propname_iterator()'s bullet.  The third is
-  a ne_version_match(0, 29) check at startup, which with a statically
-  linked bundled neon can never fire; take it if the tree ever grows a
-  way to build against a system neon.
+* #74, "Misc changes", open since 2026-04-03.  Two of its three parts
+  are taken: the neon update to 0.37.1 and propname_iterator()'s
+  bullet.  The third is a ne_version_match(0, 29) check at startup,
+  which with a statically linked bundled neon can never fire; take it
+  if the tree ever grows a way to build against a system neon.
 
   Every other pull request upstream is merged or closed.
 
 Things that were looked at and deliberately not done
 ====================================================
+
+* Concurrency in `bench'.  A cadaver process is one session on one
+  connection driven by one thread, and every command in the program
+  assumes that.  Measuring what a server does under several clients at
+  once would mean threads, a second class of global state and a
+  threading dependency in both build paths, for a number that belongs
+  to a load generator rather than to a WebDAV client.  `bench' measures
+  what this connection to this server can do, which is the question a
+  person driving cadaver has.
+
+* Per-argument globbing.  The completion scope is per argument and the
+  globbing scope is not, so `mput *.txt' expands and `put *.txt' does
+  not.  Making them agree would not help: `put' takes at most two
+  arguments, so a pattern matching three files would become "the `put'
+  command takes at most 2 arguments" where today it tries to upload a
+  file called *.txt and says it is not there.  The second message is
+  closer to what happened.  `mput' is the command that takes a list.
+
+* Sorting `ls' output differently.  ls.c sorts errors first, then
+  collections, then by URI, which is what upstream does and what the
+  expected transcripts record.  Changing it is a user-visible choice
+  that should be a `set' option rather than a new default.
 
 * Keeping NLS.  cadaver had Spanish and Italian translations and a
   gettext build.  A single self-contained executable cannot carry a
@@ -304,23 +335,27 @@ Things that were looked at and deliberately not done
   and would not compile without one.
 
 * Keeping the bundled glibc glob.  It is 35707 bytes (34.9 KiB) of
-  1998 glibc, needs fnmatch, pwd.h and a d_type that Windows does not
+  glibc, last touched in 1999, needs fnmatch, pwd.h and a d_type that Windows does not
   have, and its interrupt support was inside #ifdef SHELL, which was
-  never defined -- so the Ctrl-C handling cadaver installed around it
-  had never worked.  lib/glob.c is a third the size, has unit tests,
-  and handles Windows separators and case-insensitivity.
+  never defined, so the Ctrl-C handling cadaver installed around it had
+  never worked.  lib/glob.c is a third the size, has unit tests, and
+  handles Windows separators and case-insensitivity.
 
 * Emitting LF rather than CRLF on standard output.  cadaver writes its
   output in text mode, so a Windows console and a Windows editor both
-  see what they expect.  Transfers are unaffected: `put', `get' and
-  `edit' are binary throughout, and `cat' switches its own output to
-  binary for the length of the transfer.  tests/normalise.py strips
-  carriage returns, so the expected transcripts do not depend on it.
+  see what they expect.  Transfers are unaffected: `put', `get',
+  `rput', `rget' and `edit' are binary throughout, and `cat' switches
+  its own output to binary for the length of the transfer.
+  tests/normalise.py strips carriage returns, so the expected
+  transcripts do not depend on it.
 
-* Sorting `ls' output differently.  ls.c sorts errors first, then
-  collections, then by URI, which is what upstream does and what the
-  expected transcripts record.  Changing it is a user-visible choice
-  that should be a `set' option rather than a new default.
+* Moving the local file layer to the wide Windows calls.  The
+  application manifest makes UTF-8 the process code page, which fixes
+  every narrow call at once -- open, fopen, stat, opendir, MoveFileExA,
+  _popen -- rather than one at a time, and leaves lib/system.c reading
+  like the POSIX half beside it.  The cost is that Windows before
+  version 1903 ignores the setting; there, a path with a character the
+  active ANSI code page cannot hold fails as it did before.
 
 * An MSVC build.  Everything here assumes GCC: the warning set, the
   __attribute__ annotations in neon, the makefiles.  MinGW-w64 produces
@@ -338,19 +373,18 @@ Things that were looked at and deliberately not done
   TODO used to say that neon appended a whole second copy of the
   resource when a server ignored the Range header, because
   ne_get_range() checks the status after the body could have been
-  written.  It does not: dispatch_to_fd() below it writes to the
-  descriptor only for a 206 and discards anything else, which the
-  `norange' session established by arranging a server that ignores
-  Range.  The truncation is kept because "a failed resumeget leaves the
-  local file as it was" is worth guaranteeing here rather than by
-  inspection of a library this tree is expected to update.
+  written.  It does not: the dispatch below it writes to the descriptor
+  only for a 206 and discards anything else, which the `norange'
+  session established by arranging a server that ignores Range.  The
+  truncation is kept as a guarantee this tree makes rather than one it
+  inherits from a vendored library it expects to update.
 
 * Tracing the body of a transfer.  --trace carries every message body
   except the resource itself during `put', `get', `mput', `mget',
-  `cat' and `edit'.  A trace is for looking at the protocol, and a
-  100 MiB upload in a log file helps nobody.  If it is ever wanted,
-  out_start_transfer() in src/output.c is the one place that turns it
-  off.
+  `rput', `rget', `cat' and `edit'.  A trace is for looking at the
+  protocol, and a 100 MiB upload in a log file helps nobody.  If it is
+  ever wanted, out_start_transfer() in src/output.c is where it is
+  turned off.
 
 Cutting a release
 =================

@@ -88,7 +88,7 @@ typedef struct {
 
     /* If not NULL, checked before every directory is read and after
      * every entry.  glob() returns GLOB_ABORTED as soon as it is
-     * non-zero, which is how cadaver interrupts an expansion that is
+     * non-zero, so cadaver can interrupt an expansion that is
      * making requests to a slow server.  Set it from a signal handler;
      * nothing else is safe to do from one. */
     volatile int *gl_abort;

@@ -128,7 +128,27 @@ request from its current size.
 .IP "mget remote..."
 Download many remote resources.
 .IP "mput local..."
-Upload many local files.
+Upload many local files. A directory among them is reported as one;
+use
+.B rput
+for a tree.
+.IP "rput local [remote]"
+Upload a local directory and everything under it, creating a
+collection per directory. A collection that is already there is not
+an error. Given a plain file it does what
+.B put
+would have done.
+.IP "rget remote [local]"
+Download a collection and everything under it, creating the local
+directories as it goes. Given a plain resource it does what
+.B get
+would have done. The
+.B clobber
+option applies to every file it writes.
+
+Both refuse to go more than 64 levels deep, so a junction or a
+symbolic link that makes a directory contain itself is not walked
+forever, and both stop at a Ctrl\-C.
 .IP "cat remote..."
 Write remote resources to standard output, unmodified.
 .IP "less remote..."
@@ -197,13 +217,33 @@ DeltaV check-in, check-out and cancel.
 Show the version history of the resource.
 .IP "label res [add|set|remove] name"
 Set, change or remove a label on the resource.
+.SS Measuring
+.IP "bench [size [count]]"
+Write a generated payload into the current collection, read it back
+and delete it, and report the round trip time of a
+.B PROPFIND
+and the rate each direction moved at.
+.I size
+takes a K, M or G suffix, all powers of 1024, and defaults to 1M;
+.I count
+is how many times each part is repeated and defaults to 3. Rates are
+MiB/s and durations are wall clock, so they include server and
+network time. The payload goes to
+.IR cadaver\-bench.dat ;
+a resource already under that name is left alone and the command
+refuses.
 .SS Local and session
 .IP "lcd [directory]"
 Change the local working directory.
-.IP "lls [\-l] [directory]"
+.IP "lls [\-a] [\-l] [directory]"
 List the local directory, in the layout
 .B ls
-uses.
+uses. Without
+.B \-a
+a name beginning with a dot is left out, as it is by a wildcard.
+The listing is always in the long form, so
+.B \-l
+changes nothing; the letters may be run together.
 .IP "lpwd"
 Print the local working directory.
 .IP "open URL"
@@ -243,17 +283,25 @@ locally for
 and against the server for the rest. A remote expansion costs one
 .B PROPFIND
 per collection it has to look inside, and can be interrupted with
-Ctrl\-C.
+Ctrl\-C. What that listing says about each member is remembered for
+the rest of the command, so the commands that follow do not ask
+again.
 
 Matching against the local file system is case-insensitive on Windows
 and case-sensitive elsewhere; matching against a server is always
 case-sensitive. A pattern that matches nothing is passed through
-unexpanded, as a shell does.
+unexpanded, as a shell does, and a name beginning with a dot is not
+matched at all.
 .SH QUOTING
 A command line is split on whitespace.
 .B #
 starts a comment, and single or double quotes group an argument that
-contains spaces.
+contains spaces. A quote quotes only where it opens an argument;
+inside one it is an ordinary character, so
+.B "set lockowner foo\(dqbar"
+sets what it looks like. An empty argument is written
+.B \(dq\(dq
+and reaches the command as an empty string.
 
 On Windows a backslash is an ordinary character, because it is the path
 separator:
@@ -264,7 +312,14 @@ in quotes. Everywhere else a backslash quotes the character after it,
 as a shell does.
 .SH OPTIONS SET WITH set
 .B set
-with no argument lists the current values.
+with no argument lists the current values. A boolean option takes
+.B on
+or
+.BR off ,
+or no value at all to turn it on;
+.B "unset \fIoption\fR"
+turns it off. An option that does not exist, and a value an option
+does not know, are both reported as failures.
 .IP "tolerant"
 Tolerate collections that do not advertise WebDAV.
 .IP "overwrite"
@@ -288,6 +343,37 @@ What
 .B get
 does when the local file already exists:
 .BR ask ", " yes " or " no .
+.IP "lsformat"
+The layout of one line of an
+.B ls
+listing: a %, an optional \- for left alignment, an optional field
+width, and one letter.
+.B %n
+is the name,
+.B %h
+the full path,
+.B %s
+the size in bytes,
+.B %S
+the size rounded in powers of 1024,
+.B %d
+the modification time in local form,
+.B %D
+the same as ISO 8601 UTC,
+.B %t
+the Coll: marker,
+.B %T
+the type as a word,
+.B %e
+the executable flag,
+.B %v
+the version-control state, and
+.B %%
+a literal %. Anything else is written as it stands, and so is a
+letter that means nothing.
+.B "describe lsformat"
+prints the same list. A member the server could not report on keeps
+its own line.
 .IP "editor, pager"
 Programs to run for
 .B edit
@@ -322,6 +408,16 @@ comma-separated list of
 .BR httpauth ", " locks ", " files " and " cleartext .
 .B cleartext
 also shows credentials.
+.SH INTERRUPTING
+Ctrl\-C during a transfer abandons it and returns to the prompt. The
+command is recorded as failed with the reason
+.BR Interrupted. ,
+a download leaves no local file behind, and a partly uploaded
+resource is the server's to clean up. A second Ctrl\-C during the
+same transfer ends the session, which is the way out of one that has
+stalled so completely that no block arrives to check the first.
+Ctrl\-C at the prompt, or during a remote wildcard expansion, ends
+the session and the expansion respectively.
 .SH THE .netrc FILE
 The file
 .I .netrc
@@ -377,8 +473,8 @@ and no
 .B password
 is used for the login, and only the password is asked for.
 
-A quote character quotes only where it opens a value, which is how a
-value containing a space is written; inside one it is an ordinary
+A quote character quotes only where it opens a value, so that is how
+a value containing a space is written; inside one it is an ordinary
 character. There is no escape, so a value that has to begin with a
 quote character cannot be spelled.
 
@@ -400,6 +496,10 @@ the first case, which is what tells them apart.
 .IP "128+\fIn\fR"
 The session was ended by signal
 .IR n .
+No
+.B \-\-json
+document is written in that case: producing one from a signal handler
+is not safe, and a session cut short has no result to report.
 .SH EXAMPLES
 .IP "cadaver http://myserver.example.com/"
 Connect to myserver.example.com and open the root collection.

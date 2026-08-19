@@ -7,9 +7,9 @@
 # no point starting a WebDAV server to find that out.  It takes well
 # under a second.
 #
-# It also checks the source, for the one rule that keeps --json usable:
-# nothing in src/ may write to standard output except through
-# src/output.c.  One stray printf would corrupt the document.
+# It also checks the source: nothing in src/ may write to standard
+# output except through src/output.c.  With --json standard output
+# carries the result document, and one stray printf would corrupt it.
 #
 # Environment:
 #   CADAVER  the executable to test (default: ./cadaver or ./cadaver.exe)
@@ -135,7 +135,7 @@ contains "--help names the fork" "cadaver-windows" "$out"
 contains "--help mentions --tolerant" "--tolerant" "$out"
 
 # The program name in the synopsis is argv[0] with the directory and the
-# .exe suffix taken off, which is what a user typed.
+# .exe suffix taken off, so it is what was typed.
 contains "the synopsis does not name the executable's path" \
     "Usage: cadaver [OPTIONS] URL" "$out"
 
@@ -348,8 +348,8 @@ check "nothing in src/ calls the printf family directly" "" "$stray"
 # Anything naming stdout: fputs(x, stdout), fprintf(stdout, ...),
 # fwrite(x, 1, n, stdout), fileno(stdout).  Matching the call would miss
 # the ones written over two lines, so the name itself is what is
-# forbidden.  --trace is the one thing allowed to aim there, and --json
-# refuses to share standard output with it.
+# forbidden.  Only --trace may aim there, and --json refuses to share
+# standard output with it.
 stray=`grep -n '\bstdout\b' "$srcdir"/src/*.c \
     | grep -v '^.*src/output\.c:' | grep -v 'trace' || :`
 check "nothing in src/ names stdout except the trace" "" "$stray"

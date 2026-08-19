@@ -579,18 +579,23 @@ static void order_props_destroy(ne_propname * props)
 static int run_search(ne_session * sess, const char *uri,
 		      int depth, ne_buffer * query, search_ctx * sctx)
 {
-    int ret;
+    int ret = NE_ERROR;
     ne_request *req;
     ne_buffer *basic_search = ne_buffer_create();
-    ne_xml_parser *search_parser;
+    ne_xml_parser *search_parser = NULL;
     const char *searchorder = (const char *) get_option(opt_searchorder);
     const char *searchdorder = (const char *) get_option(opt_searchdorder);
     ne_propname *asc = order_props_create(searchorder);
     ne_propname *des = order_props_create(searchdorder);
 
+    /* One exit.  Every failure below used to return on the spot,
+     * leaving behind the request, the XML parser, the body buffer and
+     * both property lists -- several kilobytes for every search that
+     * did not work, in a process that goes on to read another command. */
+
     /* create/prep the request */
     if ((req = ne_request_create(sess, "SEARCH", uri)) == NULL)
-	return NE_ERROR;
+	goto done;
 
     /* Create the request body */
     ne_buffer_zappend(basic_search,
@@ -599,16 +604,16 @@ static int run_search(ne_session * sess, const char *uri,
 		      EOL);
 
     if (search_select_gen(NULL, basic_search) != NE_OK)
-	return NE_ERROR;
+	goto done;
 
     if (search_from_gen(uri, depth, basic_search) != NE_OK)
-	return NE_ERROR;
+	goto done;
 
     if (search_where_gen(query->data, basic_search) != NE_OK)
-	return NE_ERROR;
+	goto done;
 
     if (search_orderby_gen(asc, des, basic_search) != NE_OK)
-	return NE_ERROR;
+	goto done;
 
     ne_buffer_zappend(basic_search, "</D:basicsearch></D:searchrequest>" EOL);
 
@@ -628,26 +633,25 @@ static int run_search(ne_session * sess, const char *uri,
 				search_parser);
 
     /* run the request, see what comes back. */
-    if ((ret = ne_request_dispatch(req)) != NE_OK)
-	return ret;
+    ret = ne_request_dispatch(req);
 
-    /* Check Errors from XML parser */
-    if (sctx->err_code != NE_OK)
-	return NE_ERROR;
+    /* Errors from the XML parser, then the response code: a SEARCH
+     * answers 207, and anything else is not a result set. */
+    if (ret == NE_OK && sctx->err_code != NE_OK)
+	ret = NE_ERROR;
 
-    /* Get response code */
-    if (ne_get_status(req)->code != 207)
-	return NE_ERROR;
+    if (ret == NE_OK && ne_get_status(req)->code != 207)
+	ret = NE_ERROR;
 
-    /* destroy request, parse, and etc */
+done:
     order_props_destroy(asc);
     order_props_destroy(des);
 
     ne_buffer_destroy(basic_search);
-    ne_request_destroy(req);
-    ne_xml_destroy(search_parser);
+    if (req) ne_request_destroy(req);
+    if (search_parser) ne_xml_destroy(search_parser);
 
-    return NE_OK;
+    return ret;
 }
 
 /* Main execute routine for search */

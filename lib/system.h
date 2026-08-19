@@ -117,10 +117,10 @@ struct cad_finfo {
 /* Fills in `info' for `path'.  Returns zero, or -1 with errno set. */
 int cad_file_info(const char *path, struct cad_finfo *info);
 
-/* The same for a descriptor that is already open, which is how an
- * upload learns the length to declare: the file could be renamed
- * between the open and the request, and the length has to describe the
- * bytes actually being sent. */
+/* The same for a descriptor that is already open.  An upload learns
+ * the length to declare this way: the file could be renamed between
+ * the open and the request, and the length has to describe the bytes
+ * actually being sent. */
 int cad_fd_info(int fd, struct cad_finfo *info);
 
 /* Truncates the open file `fd' to `length' bytes.  Returns zero, or -1

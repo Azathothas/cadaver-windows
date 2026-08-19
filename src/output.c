@@ -950,7 +950,7 @@ static void put_string(FILE *fp, const char *str)
 }
 
 /* Seconds to millisecond resolution, which is all a wall-clock
- * measurement of a network round trip can honestly claim. */
+ * measurement of a network round trip means. */
 static void put_duration(FILE *fp, double seconds)
 {
     if (seconds < 0) seconds = 0;

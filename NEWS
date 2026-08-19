@@ -1,6 +1,152 @@
 Changes in the Windows fork (https://github.com/Azathothas/cadaver-windows).
 Entries below this section are upstream's.
 
+Changes in version 0.28-win3:
+* `rget' and `rput': recursive download and upload, creating the
+  collections and the local directories as they go.  `rput' reports a
+  collection that is already there as such rather than as a failure,
+  and skips the subtree under one it could not create, because nothing
+  under a collection that is not there can succeed.  Either form given
+  a plain resource does what `get' or `put' would have done.  Both
+  refuse to go more than 64 levels deep, so a junction or a symbolic
+  link that makes a directory contain itself is not walked forever.
+* Ctrl-C during a transfer abandons it and returns to the prompt.  It
+  used to end the process, which during an upload leaves the server
+  holding half a resource and no indication that anything went wrong.
+  neon reads or writes a whole body inside one call and offers no
+  cancel, so src/transfer.c is the same dispatch loops with the
+  interrupt flag checked between blocks.  A second Ctrl-C during the
+  same transfer ends the session as before, which is the way out of one
+  that has stalled so completely that no block arrives to check the
+  first.  `mput', `mget', `cat' and `less' with several arguments stop
+  at that point rather than carrying on to the next file.
+* The new `bench' command measures what this connection to this server
+  can do: the round trip time of a PROPFIND, and the rate a PUT and a
+  GET of a generated payload move at.  Rates are MiB/s and durations
+  are wall clock.  --json carries a "benchmark" object; the rate in it
+  is null where the duration reads as 0.000 seconds, because a rate
+  worked out from a duration the document cannot express is one the
+  numbers beside it do not support.
+* A path outside the active ANSI code page works.  cadaver re-decodes
+  its command line from the wide form and hands UTF-8 around, and
+  lib/system.c then opens, stats and renames with the C runtime's
+  narrow calls, which read the active code page: `lcd' into a directory
+  called 日本語 reported "No such file or directory", and `put' could
+  not open a file that was sitting there.  The executable now carries
+  an application manifest making UTF-8 the process code page, which
+  Windows 10 version 1903 and later honour.
+* The DeltaV commands no longer put a trailing slash on the path of a
+  plain resource.  `version', `checkin', `checkout', `uncheckout',
+  `history' and `label' resolved with uri_resolve_native_coll(), which
+  adds one unconditionally, and DeltaV is nearly always applied to a
+  plain resource, where /x/ and /x are two different things.  Nothing
+  had ever caught it: no test server answered any of those methods.
+* What one command has been told about a resource is remembered for the
+  length of that command.  A command asks what a path is before doing
+  anything with it, and expanding a remote wildcard asked twice more
+  per match -- once through the glob's stat callback and once to
+  resolve the expanded name -- although the listing that produced the
+  match had already said.  Against the Go test server, `delete *.txt'
+  over twenty files went from twenty-two PROPFINDs to three.
+* `set lsformat' says how one line of an `ls' listing is laid out: the
+  name, the full path, the size in bytes or rounded in powers of 1024,
+  the modification time in local form or as ISO 8601 UTC, the type as a
+  marker or as a word, the executable flag and the version-control
+  state.  `describe lsformat' prints the list and `unset lsformat'
+  returns to the layout `ls' has always had.
+* `lls' takes -a, and without it leaves out a name beginning with a
+  dot.  That is what a wildcard already did: `mput *' never matched
+  one, so the listing was showing what an upload would skip.
+* The progress indicator writes a byte count instead of dots when the
+  output is not a terminal.  One dot per transfer callback left a line
+  of hundreds of them in a log and no number at all.  A finished
+  transfer reports "[28 bytes]" beside "succeeded."; a long one says
+  how far it has got every ten seconds.  Nothing is reported beside a
+  failure, where what arrived was the error body.
+* `set' takes on and off for a boolean option.  `set' with no argument
+  displays every one of them as on or off, and until now that could not
+  be typed back in: a boolean refused a value outright, so `unset' was
+  the only way to turn one off.
+* `set searchdepth' reports a value it does not know instead of
+  treating it as infinity, so a typo no longer asks for the widest
+  possible search in silence.  `unset' on an option that does not exist
+  is a failed command, as `set' on one already was.
+* An empty argument can be written.  gettoken() returned NULL for a
+  zero-length token and parse_command() reads NULL as the end of the
+  line, so `propset res name ""' set nothing and dropped every argument
+  after it without a word.
+* An option name completes after `set', `unset' and `describe'.  The
+  command table has said so since the completion scope became
+  per-argument; the completion function had that case falling through
+  to no matches.
+* `copy', `move' and `rename' onto a resource that is already there say
+  which resource it was.  The request carries Overwrite: F and the
+  server answers 412, which names neither the resource in the way nor
+  the option that would replace it.  `rename' sends Overwrite: F
+  whatever the option says, so it reports that `move' is the command
+  that can overwrite.
+* --json carries what was printed outside any command -- the connection
+  banner, the closing message.  It was captured into a buffer that was
+  never written, although AGENTS.md has always documented the run's
+  "output" field.
+* `-r' naming a file that cannot be read is a usage error, reported
+  before anything connects.  It used to print a message, run nothing at
+  all and exit 0: the failure belonged to no command, and the exit
+  status counts commands.
+* Every request in a --trace is tagged with the command that caused it.
+  The label was set after the line had been parsed, so the requests a
+  wildcard expansion makes were tagged "no command", which is when the
+  tag is most wanted.  A wildcard now appears twice, as the pattern and
+  as what it matched.
+* `search' reports its outcome where every other command does, and
+  prints the results after it.  It opened no operation at all, so the
+  SEARCH it made was recorded against nothing; a search that matched
+  nothing printed nothing; and the media type in a result line was cut
+  to ten characters, which made "application/octet-stream" into
+  "applicatio".
+* `history' closes the operation it opens.  Nothing did on success, so
+  the record carried a duration measured from the start of the command
+  and no outcome.  `label' with an action that is not add, set or
+  remove reports it the way every other failure is reported.
+* Bug fix: getrestype() dereferenced a null pointer when a PROPFIND
+  came back as a multistatus that named no resource at all.
+* Bug fix: configure.ac never called AC_CANONICAL_HOST, so $host_os was
+  empty and the Windows branch of the platform check never ran.  The
+  autotools build on Windows reported "posix" and added no -lws2_32 of
+  its own; it linked anyway, because neon's macros bring that library
+  in, which is why nothing noticed.
+* Bug fix: run_search() left the request, the XML parser, the body
+  buffer and both property lists behind on every search that did not
+  work, and execute_chexec() leaked the URL when its first argument was
+  not + or -.
+* Tests:
+ - tests/godav/deltav.go answers SEARCH and the DeltaV methods, which
+   x/net/webdav does not implement and wsgidav does not either.  The
+   commands that use them had been compiled, linked and never run.
+   That was the largest untested surface in the tree, and the first
+   run against it found the trailing slash above.
+ - The Go test server can pace the response and request bodies under
+   one prefix, so that a transfer lasts long enough to be interrupted
+   or measured; everything here is a local disk over the loopback
+   interface.
+ - tests/godav.sh checks that each special prefix covers the name of
+   every session that wants that subtree and of no other.  The
+   collection a session runs in is named after the session, so the
+   coupling was real and was a comment.
+ - Five more scripted sessions: recursive transfer, bench, listings,
+   COPY and MOVE onto an existing resource, and DASL with DeltaV.
+   tests/bench_check.py looks at the numbers bench reported, which
+   tests/normalise.py has to replace in the transcript.
+ - tests/sessions/glob.check counts the requests one command made, so
+   that losing the resource cache has something to fail.
+ - tests/offline.sh is 61 checks rather than 43, and looks for two more
+   ways to write to standard output: a stdio call naming stdout, and a
+   write to the descriptor.
+* Verified by hand, because the harness cannot: Ctrl-C during a paced
+  4194304-byte (4.0 MiB) transfer, tab completion of an option name in
+  a real Windows console, and a directory called 日本語 holding
+  テスト.txt.
+
 Changes in version 0.28-win2:
 * The exit status says what happened.  0 if every command succeeded,
   otherwise the number that failed, capped at 125 so that it cannot be
@@ -104,7 +250,9 @@ Changes in version 0.28-win2:
   bullet that `propget' and `head' use.
 * Tests:
  - tests/netrc.sh, 26 unit tests for lib/netrc.c.  What that parser
-   gets wrong is invisible in use, which is how #75 survived.
+   gets wrong is invisible in use: a password it mangles produces an
+   authentication failure that names neither the file nor the
+   character.
  - Nine more scripted sessions: the exit status, --json, --trace,
    `clobber', renaming a collection, a lock owner containing markup,
    a server that ignores Range, and two that authenticate from a .netrc
@@ -118,7 +266,7 @@ Changes in version 0.28-win2:
  - A session may bring a .flags file of extra command-line arguments,
    a .home holding a .netrc, a .stdin, and a .servers naming the
    servers it applies to.
- - tests/offline.sh is 41 checks rather than 18.
+ - tests/offline.sh is 43 checks rather than 18.
 
 Changes in version 0.28-win1:
 * cadaver builds and runs on Windows as a native MinGW-w64 program: no

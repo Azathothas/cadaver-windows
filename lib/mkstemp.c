@@ -46,7 +46,7 @@
  * downloaded resource into it and gets a carriage return in front of
  * every newline; and the file has to be private to the user, which the
  * mode argument of open() only expresses on POSIX.  What is left is
- * short enough to be worth having in one place. */
+ * short enough to keep in one place. */
 
 #define LETTERS "abcdefghijklmnopqrstuvwxyz0123456789"
 #define NLETTERS (sizeof LETTERS - 1)

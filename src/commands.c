@@ -1101,8 +1101,7 @@ static void do_copymove(int argc, const char *argv[],
         else if (src_is_coll) {
             /* Case 4: the destination does not exist, so this is a
              * rename of the collection.  The trailing slash goes on
-             * both ends, which is what a server expects of a
-             * collection URI. */
+             * both ends, as a collection URI has. */
             ops[n].dest = ne_path_has_trailing_slash(uri_dest)
                 ? ne_strdup(uri_dest) : ne_concat(uri_dest, "/", NULL);
         }
@@ -1752,6 +1751,7 @@ static void execute_chexec(const char *val, const char *native_path)
                  "or chexec - %s   to make the resource unexecutable\n"),
                  native_path, native_path);
         cmd_failed(_("the first argument must be + or -"));
+        ne_free(uri_path);
         return;
     }
     

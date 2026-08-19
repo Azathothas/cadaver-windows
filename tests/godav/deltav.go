@@ -501,8 +501,8 @@ func (c candidate) value(prop string) string {
 }
 
 // A comparison that is numeric when both sides are numbers and
-// lexicographic otherwise, which is what a client asking
-// "getcontentlength < 100" means.
+// lexicographic otherwise.  A client asking for
+// "getcontentlength < 100" means the number.
 func compare(op, left, right string) bool {
 	order := 0
 

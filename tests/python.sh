@@ -23,7 +23,7 @@
 # registered with it.
 #
 # sysconfig.get_platform() reports mingw_x86_64_ucrt_gnu under MSYS2
-# against win-amd64 for a native Python, which is how the two are told
+# against win-amd64 for a native Python, so that is how they are told
 # apart.
 litmus_usable_python() {
     _plat=`"$1" -c "import sysconfig; print(sysconfig.get_platform())" 2>/dev/null` \
