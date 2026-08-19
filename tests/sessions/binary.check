@@ -1,0 +1,4 @@
+# Every one of the 256 byte values has to survive the round trip, in
+# both directions and through the resumed download as well.
+cmp "$WORK/every-byte.dat" "$WORK/back.dat"
+cmp "$WORK/every-byte.dat" "$WORK/partial.dat"

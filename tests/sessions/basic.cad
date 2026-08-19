@@ -1,0 +1,17 @@
+# PUT, GET, MKCOL and DELETE on plain resources and collections.
+lcd @WORK@
+ls
+mkcol coll
+ls
+cd coll
+put hello.txt
+ls
+cat hello.txt
+get hello.txt fetched.txt
+head hello.txt
+delete hello.txt
+ls
+cd ..
+rmcol coll
+ls
+quit

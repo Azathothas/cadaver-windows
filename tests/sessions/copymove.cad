@@ -1,0 +1,20 @@
+# COPY and MOVE, for resources and for collections.
+lcd @WORK@
+mkcol src
+cd src
+put hello.txt
+put second.txt
+cd ..
+mkcol dest
+copy src/hello.txt dest/copied.txt
+move src/second.txt dest/moved.txt
+ls src
+ls dest
+rename dest/copied.txt dest/renamed.txt
+ls dest
+copy src dest
+ls dest
+rmcol dest
+rmcol src
+ls
+quit

@@ -1,0 +1,24 @@
+Creating `src': succeeded.
+Uploading hello.txt to `/copymove/src/hello.txt': [.. succeeded.
+Uploading second.txt to `/copymove/src/second.txt': [.. succeeded.
+Creating `dest': succeeded.
+Copying `/copymove/src/hello.txt' to `/copymove/dest/copied.txt': succeeded.
+Moving `/copymove/src/second.txt' to `/copymove/dest/moved.txt': succeeded.
+Listing collection `/copymove/src/': succeeded.
+        hello.txt                             28  <DATE>
+Listing collection `/copymove/dest/': succeeded.
+        copied.txt                            28  <DATE>
+        moved.txt                             16  <DATE>
+Renaming `/copymove/dest/copied.txt' to `/copymove/dest/renamed.txt': succeeded.
+Listing collection `/copymove/dest/': succeeded.
+        moved.txt                             16  <DATE>
+        renamed.txt                           28  <DATE>
+Copying `/copymove/src/' to `/copymove/dest/src': succeeded.
+Listing collection `/copymove/dest/': succeeded.
+Coll:   src                                    0  <DATE>
+        moved.txt                             16  <DATE>
+        renamed.txt                           28  <DATE>
+Deleting collection `/copymove/dest/': succeeded.
+Deleting collection `/copymove/src/': succeeded.
+Listing collection `/copymove/': collection is empty.
+Connection to `127.0.0.1' closed.

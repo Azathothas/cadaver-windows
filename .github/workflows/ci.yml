@@ -1,0 +1,310 @@
+name: Build and test
+
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same ref supersedes an in-flight run.  Tag runs
+# are never cancelled: one cut short partway through leaves a release
+# half made.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+jobs:
+  # Cheap checks that do not need a Windows runner, so a typo fails in
+  # under a minute instead of after three MSYS2 installs.
+  lint:
+    name: lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # shellcheck ships in the runner image, but installing it when it
+      # does not keeps this from breaking on an image change.
+      - name: Shell scripts
+        run: |
+          if ! command -v shellcheck >/dev/null 2>&1; then
+            sudo apt-get -qq update
+            sudo apt-get -qq install -y shellcheck
+          fi
+          shellcheck --version
+          shellcheck --severity=warning autogen.sh tests/*.sh win32/*.sh
+
+      # A virtualenv rather than pip --user: recent Debian and Ubuntu
+      # mark the system interpreter externally managed and refuse.
+      - name: Python tools
+        run: |
+          python3 -m venv /tmp/lintvenv
+          /tmp/lintvenv/bin/pip install --quiet --upgrade pip
+          /tmp/lintvenv/bin/pip install --quiet pyflakes pyyaml codespell
+
+      - name: Python
+        run: /tmp/lintvenv/bin/python -m pyflakes tests/*.py
+
+      - name: Spelling
+        run: /tmp/lintvenv/bin/codespell
+
+      - name: Workflow and dependabot YAML
+        run: |
+          /tmp/lintvenv/bin/python - <<'PY'
+          import yaml
+          for path in (".github/workflows/ci.yml", ".github/dependabot.yml"):
+              with open(path, encoding="utf-8") as fh:
+                  yaml.safe_load(fh)
+              print("ok", path)
+          PY
+
+      - name: Go test server
+        run: |
+          cd tests/godav
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            gofmt -d .
+            echo "::error::gofmt found unformatted files: $unformatted"
+            exit 1
+          fi
+          go vet ./...
+
+      - name: VERSION is one plain line
+        run: |
+          if [ "$(wc -l < VERSION)" != "1" ]; then
+            echo "::error::VERSION must be exactly one line"
+            exit 1
+          fi
+          case "$(cat VERSION)" in
+            *[!0-9A-Za-z.-]*|"")
+              echo "::error::VERSION holds something that is not a version string"
+              exit 1
+              ;;
+          esac
+          echo "VERSION is $(cat VERSION)"
+
+      # win32/config.h is generated but checked in, and a stale copy
+      # would build Makefile.w32 against the wrong answers.  The
+      # version is the one field that must never appear in it.
+      - name: win32/config.h carries no version
+        run: |
+          if grep -qE '^#define PACKAGE_(VERSION|STRING) ' win32/config.h; then
+            echo "::error::win32/config.h defines the version; regenerate it with win32/regen-config.sh"
+            exit 1
+          fi
+          echo "win32/config.h is clean"
+
+  # Both build paths, each checked against two real WebDAV servers.
+  build:
+    needs: lint
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: autotools
+            static: '0'
+          - name: makefile-w32
+            static: '0'
+          - name: makefile-w32-static
+            static: '1'
+    name: ${{ matrix.name }}
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          # path-type: inherit keeps the Windows PATH, so the Python
+          # that tests/wsgidav.sh needs and the Go that tests/godav.sh
+          # needs stay reachable from the MSYS2 shell.
+          path-type: inherit
+          install: >-
+            autoconf
+            automake
+            libtool
+            m4
+            make
+            pkgconf
+          pacboy: >-
+            gcc:p
+            openssl:p
+            expat:p
+            readline:p
+            libiconv:p
+            pkgconf:p
+
+      - name: Build (autotools)
+        if: matrix.name == 'autotools'
+        run: |
+          ./autogen.sh
+          ./configure --with-ssl=openssl --enable-warnings
+          make 2>&1 | tee build.log
+
+      - name: Build (Makefile.w32)
+        if: matrix.name != 'autotools'
+        run: make -f Makefile.w32 STATIC=${{ matrix.static }} 2>&1 | tee build.log
+
+      # Both build paths are warning-free, including the vendored neon,
+      # so a new warning is a regression rather than background noise.
+      - name: No compiler warnings
+        run: |
+          if grep -n 'warning:' build.log; then
+            echo "::error::the build emitted compiler warnings"
+            exit 1
+          fi
+          echo "no warnings"
+
+      # No server, no network, under a second: if the executable cannot
+      # report its own version there is no point starting one.
+      - name: Checks that need no server
+        run: ./tests/offline.sh
+
+      - name: Unit tests for the globbing
+        run: ./tests/glob.sh
+
+      # x/net/webdav locks correctly, which makes this the gate that
+      # covers the lock session at all.
+      - name: Sessions against x/net/webdav
+        run: ./tests/godav.sh
+
+      # The virtualenv is the slowest part of the wsgidav harness and
+      # changes only when the script that builds it does.  A venv also
+      # depends on the interpreter that made it, which the key cannot
+      # see; tests/wsgidav.sh checks that the restored one still works
+      # and rebuilds it if not, so a stale hit costs a restore rather
+      # than a confusing failure.
+      - uses: actions/cache@v6
+        with:
+          path: dav-venv
+          key: dav-venv-${{ runner.os }}-${{ hashFiles('tests/wsgidav.sh') }}
+
+      # wsgidav has a dead property store, which x/net/webdav does not,
+      # so this is the gate that covers the property session.
+      - name: Sessions against wsgidav
+        run: ./tests/wsgidav.sh
+
+      - name: Confirm the static executable carries no third-party DLLs
+        if: matrix.static == '1'
+        run: |
+          if objdump -p cadaver.exe | grep -i 'DLL Name' \
+             | grep -viE 'api-ms-win|kernel32|ws2_32|advapi32|user32|gdi32|shell32|crypt32|bcrypt'; then
+            echo "::error::cadaver.exe depends on a DLL that will not be present on a clean machine"
+            exit 1
+          fi
+          echo "cadaver.exe is self-contained"
+
+      - name: Upload the executable
+        if: matrix.static == '1'
+        uses: actions/upload-artifact@v7
+        with:
+          name: cadaver-windows-x86_64
+          # The executable and the documentation a user of the binary
+          # needs.  The manual page is not included: nothing on Windows
+          # renders one.
+          path: |
+            cadaver.exe
+            README.md
+            AGENTS.md
+            COPYING
+          if-no-files-found: error
+
+  # Tagged pushes publish the self-contained executable as a release.
+  # Asset names carry no version, so
+  # .../releases/latest/download/cadaver.exe is a fixed URL that always
+  # resolves to the newest one.
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: The tag must match VERSION
+        run: |
+          want="v$(cat VERSION)"
+          if [ "$TAG" != "$want" ]; then
+            echo "::error::tag $TAG does not match VERSION, which says $want"
+            exit 1
+          fi
+
+      # gh release create refuses to overwrite too, but only after
+      # uploading.  Failing here keeps a good release untouched.
+      - name: Refuse to overwrite an existing release
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::release $TAG already exists; delete it or tag a new version"
+            exit 1
+          fi
+          echo "$TAG is free"
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: cadaver-windows-x86_64
+          path: dist
+
+      - name: Package
+        run: |
+          test -f dist/cadaver.exe
+          (cd dist && zip -r ../cadaver-windows-x86_64.zip .)
+
+      - name: Create the release
+        run: |
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "$TAG" \
+            --generate-notes \
+            --latest \
+            --verify-tag \
+            dist/cadaver.exe \
+            cadaver-windows-x86_64.zip
+
+      # --generate-notes on a repository whose commits go straight to
+      # master produces one line, a link to the compare view.  The
+      # annotated tag already says what the release is, so put that
+      # above it rather than leaving the page bare.
+      - name: Put the tag's own message above the generated notes
+        run: |
+          msg=$(git tag -l --format='%(contents)' "$TAG")
+          if [ -z "$msg" ]; then
+            # checkout does not always leave the tag object behind, and
+            # a missing message would quietly leave the page bare.
+            git fetch --no-tags --depth=1 origin \
+              "refs/tags/$TAG:refs/tags/$TAG" 2>/dev/null || :
+            msg=$(git tag -l --format='%(contents)' "$TAG")
+          fi
+          if [ -n "$msg" ]; then
+            generated=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
+                          --json body --jq .body)
+            printf '%s\n\n---\n\n%s\n' "$msg" "$generated" > notes.md
+            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" \
+              --notes-file notes.md
+          else
+            echo "no message on $TAG; leaving the generated notes alone"
+          fi
+
+      # A release that exists but has no assets is worse than none: the
+      # fixed download URL would 404 and nothing would have said so.
+      - name: Confirm both assets are attached
+        run: |
+          names=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" \
+                    --json assets --jq '.assets[].name' | sort | tr '\n' ' ')
+          echo "assets: $names"
+          for want in cadaver.exe cadaver-windows-x86_64.zip; do
+            case " $names " in
+              *" $want "*) ;;
+              *) echo "::error::release $TAG is missing $want"; exit 1 ;;
+            esac
+          done

@@ -1,0 +1,20 @@
+# Local globbing on mput, remote globbing on copy and delete.
+lcd @WORK@
+mkcol g
+cd g
+mput *.txt
+ls
+mkcol keep
+copy *.txt keep
+ls keep
+copy [hs]*.txt keep
+ls keep
+delete keep/*.txt
+ls keep
+rmcol keep
+delete *.txt
+ls
+mput nosuch*.txt
+cd ..
+rmcol g
+quit

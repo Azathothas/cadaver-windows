@@ -1,0 +1,7 @@
+Creating `bin': succeeded.
+Uploading every-byte.dat to `/binary/bin/every-byte.dat': [.. succeeded.
+Listing collection `/binary/bin/': succeeded.
+        every-byte.dat                       256  <DATE>
+Downloading `every-byte.dat' to `back.dat': [.. succeeded.
+Downloading `every-byte.dat' to `partial.dat': [.. succeeded.
+Connection to `127.0.0.1' closed.

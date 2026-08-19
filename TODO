@@ -1,0 +1,431 @@
+Start here
+==========
+
+This is a Windows port of cadaver (https://github.com/notroj/cadaver).
+If you are picking it up cold, read these in order:
+
+  1. README.md    what this fork is, how to build it, how to run it
+  2. AGENTS.md    how to drive cadaver from a program, and how to read
+                  what it prints back
+  3. PATCHES.md   what was changed inside neon/ and why, needed before
+                  you update the bundled neon
+  4. This file    what is left to do
+
+Layout:
+
+  src/            cadaver itself: the command implementations
+                  (commands.c), the command table and dispatcher
+                  (cadaver.c), the tokeniser and glob driver
+                  (cmdline.c), options (options.c), listings (ls.c),
+                  the edit command (edit.c), DASL search (search.c)
+                  and DeltaV (version.c)
+  lib/            portability: the platform layer (system.c), filename
+                  globbing (glob.c), the password prompt (getpass.c),
+                  temporary files (mkstemp.c), .netrc (netrc.c)
+  neon/           vendored neon 0.37.1, checked in, not a submodule.
+                  Patched; see PATCHES.md
+  win32/config.h  generated config.h, checked in so Makefile.w32 works
+                  without autotools.  win32/regen-config.sh rewrites it
+  VERSION         the fork version, read by both build paths
+  tests/          the four test harnesses and their expected output
+  Makefile.w32    the no-autotools build
+  doc/cadaver.1   the manual page
+  .github/        CI: lint, both build paths, four gates, release
+
+Everything is one executable:
+
+  cadaver URL
+  cadaver -r commands.txt URL
+  printf 'ls\nquit\n' | cadaver URL
+
+Test harnesses in tests/:
+
+  offline.sh      18 checks that need no server, no network and no
+                  Python.  Run it first; it takes under a second.
+  glob.sh         48 unit tests for lib/glob.c, compiled on the spot.
+                  Run it after touching the globbing.
+  godav.sh        the scripted sessions against golang.org/x/net/webdav
+  wsgidav.sh      the same sessions against wsgidav
+  session.sh      the driver both of those call: runs each
+                  tests/sessions/*.cad and compares the transcript
+                  against tests/expected/<server>/
+  normalise.py    replaces the parts of a transcript that legitimately
+                  differ between runs
+  expand.py       substitutes the paths into a session script
+
+Neither test server is complete, and the difference matters:
+
+  * x/net/webdav locks correctly, including a LOCK on an unmapped URL,
+    but has no dead property store, so most of the props session fails
+    against it.
+  * wsgidav has a dead property store, so props is meaningful there,
+    but it answers LOCK with the Content-Type "application;
+    charset=utf-8", which is not a media type.  neon discards the body
+    unparsed, cadaver never sees the lock token, and every lock test
+    reports a failure that is the server's.
+
+So: verify lock work against godav.sh, property work against
+wsgidav.sh, and do not read either result as the whole picture.
+
+Before you change anything
+==========================
+
+Run the gates and note the numbers:
+
+  ./tests/offline.sh
+  ./tests/glob.sh
+  ./tests/godav.sh
+  ./tests/wsgidav.sh
+
+All four must pass, the last two printing "All sessions match the
+expected results".  If they do not, fix that before doing anything
+else.  Everything below assumes a green baseline.
+
+Both build paths must stay warning-free:
+
+  ./autogen.sh && ./configure --with-ssl=openssl --enable-warnings && make
+  make -f Makefile.w32
+
+CI greps the build log for "warning:" and fails on a hit, so a new
+warning is a regression rather than background noise.
+
+Conventions, in code and in prose:
+
+  * Binary units, always: KiB, MiB, GiB, powers of 1024.  Never KB, MB
+    or GB for a quantity of bytes, and never a decimal power of ten.
+    Rates are MiB/s.
+  * Timestamps in anything machine-readable are ISO 8601 in UTC with
+    millisecond precision and a trailing Z, e.g.
+    2026-08-19T13:04:54.429Z.  Truncate sub-second digits, do not
+    round, so a stamp never names a moment that had not happened yet.
+  * Durations are seconds to millisecond resolution, and are
+    wall-clock.  Say so when reporting them, because they include
+    server and network time.
+  * Quote exact byte counts where the exact figure matters, with the
+    rounded binary figure in brackets after it.
+  * The version lives in VERSION and nowhere else.  win32/config.h
+    deliberately has no copy of it.
+
+If you change what cadaver prints, the expected transcripts have to
+move with it:
+
+  ./tests/godav.sh --regenerate
+  ./tests/wsgidav.sh --regenerate
+
+and then read the diff before committing it.  --regenerate will
+happily enshrine a regression; the point of those files is that a
+change in behaviour has to be looked at by a person.
+
+High value work
+===============
+
+In rough order.  The first three are what stands between this and
+being usable from a script without heuristics.
+
+* The exit status says nothing.  main() returns 0 however the session
+  went: every command can fail, the connection can be refused, and
+  cadaver still exits 0.  A script has to parse the transcript, which
+  AGENTS.md documents because there is currently no alternative.
+
+  What it should be: 0 if every command succeeded, non-zero if any
+  failed, with the count capped so it cannot be mistaken for a
+  signalled exit.  out_result() in src/commands.c is the one place
+  every command's outcome passes through, so the counter goes there.
+  Decide what a command that prints its own failure without going
+  through out_result() should do -- rmcol on a plain resource, for
+  instance -- and make them all consistent.
+
+  While you are there: --help and --version exit -1, which Windows
+  reports as 4294967295.  Both should exit 0, and a usage error 2.
+
+* No machine-readable output.  litmus-windows grew --json for exactly
+  this reason and the shape it settled on is worth copying: one object
+  on stdout and nothing else, with the human-readable message kept as
+  a "context" string and a separate "error" object carrying the method,
+  the request target as it went on the wire, and the status, so that a
+  consumer branches on the classification rather than on prose.
+
+  For cadaver the natural unit is the command rather than the test:
+
+    {"command": "put", "args": ["report.pdf"],
+     "target": "/dav/report.pdf", "status": "ok", "duration": 0.061}
+
+  with a run-level object around the sequence.  Design it once and
+  document it in AGENTS.md as a contract, as litmus-windows does.
+
+* No wire trace.  `set debug http` exists and goes to stderr, which is
+  most of the way there, but it is neon's format, it cannot be sent to
+  a file, and it cannot be turned on from the command line.  A
+  --trace[=FILE] that dumps every request and response, tagged with the
+  command that issued it, would make a failing session diagnosable
+  without a proxy.  litmus-windows has one; the mechanism is
+  ne_debug_init() plus ne_hook_create_request/ne_hook_post_headers.
+
+* A failed `get' leaves an empty file behind.  do_get() in
+  src/commands.c opens the local file with O_CREAT before making the
+  request, so a 404 or a dropped connection leaves a zero-length file.
+  The next `get' of the same resource then finds it, prompts "Enter
+  local filename", reads end of file in a script, and downloads
+  nothing.  One transient error thus poisons every retry.
+
+  Download to a temporary name in the same directory and rename on
+  success, or unlink on failure if the file was created by this call.
+
+* `get' prompts when the local file exists.  Reasonable interactively,
+  useless in a script: with standard input at end of file it prints
+  "cancelled." and nothing is downloaded.  There should be a way to
+  say what to do -- an --overwrite or --no-clobber flag, or an option
+  in the same family as `overwrite'.
+
+* `resumeget' can corrupt the local file.  neon's ne_get_range()
+  checks that the response was 206 and reports an error otherwise, but
+  it checks after the body has already been written to the descriptor.
+  A server that ignores Range and answers 200 with the whole resource
+  therefore appends a complete copy to the partial file, and cadaver
+  reports a failure without saying that the file is now wrong.  Record
+  the size before the request and truncate back to it on failure.
+
+* `mput *' tries to upload directories.  It reports "Could not open
+  file: Permission denied" for each one, which is neither accurate nor
+  useful.  Skip a directory with a clear message, or add a recursive
+  upload -- see rget/rput below.
+
+Inherited upstream issues
+=========================
+
+Every open issue in notroj/cadaver at the time of the fork, with what
+is actually wrong.  Upstream has not moved on any of them; they are
+this fork's to fix.
+
+* #75, netrc parser removes single quote from value (open since
+  2026-04-27).  lib/netrc.c strips any ' or " it finds while reading a
+  token, so a password containing one is silently mangled and
+  authentication fails with no indication why.  The reporter's password
+  was randomly generated and worked with every other WebDAV client.
+
+  The netrc convention is that a quote only quotes when it opens a
+  token; inside one it is an ordinary character.  Fix the tokeniser to
+  match, and add a case to the tests -- this is testable offline
+  against a temporary .netrc, so it wants a harness of its own rather
+  than a session test.
+
+* #64, lock owner is not XML-escaped (open since 2025-05-29).
+  `set lockowner 'foo&bar'` then `lock` produces 400 Bad Request.
+  getowner() in src/commands.c wraps the option's value in <href> and
+  hands the result to neon, and neon's ne_locks.c concatenates it into
+  the request body verbatim:
+
+    ne_buffer_concat(body, "<owner>", lock->owner, "</owner>\n", NULL);
+
+  so an ampersand or an angle bracket in the value goes on the wire as
+  itself and the body is not well-formed XML.  neon has no escaping
+  helper to call -- there is no ne_xml_escape -- so cadaver has to do
+  it: escape &, <, > and the quotes in getowner(), and add a session
+  that sets an owner containing them.  The same body escaping arguably
+  belongs in neon; worth reporting there as well.
+
+* #54, `mv collection/ newname/' fails (open since 2024-11-27, reported
+  by the upstream maintainer).  do_copymove() refuses a collection
+  source with a non-collection destination, which is right when the
+  destination exists and is a plain resource, but a name that does not
+  exist yet is not a non-collection.  Renaming a collection with `mv'
+  worked before 0.26.  `rename' is the workaround.
+
+  Distinguish "the destination exists and is not a collection", which
+  must still be refused, from "the destination does not exist", which
+  is a rename.
+
+* #25, automatic login with .cadaverrc and .netrc not working (open
+  since 2023-01-10).  Not a parser bug: supply_creds_server() in
+  src/cadaver.c uses the netrc entry only when it has both an account
+  and a password, so a .netrc that supplies the username and expects a
+  prompt for the password is ignored entirely, and both are asked for.
+  Use whichever fields are present and prompt for the rest.
+
+* #4, cannot access a share whose resourcetype is malformed (open since
+  2022-07-15).  A server returned <collection/> without the DAV
+  namespace prefix, so cadaver did not recognise the collection and
+  reported "(not WebDAV-enabled?)".  The server is wrong and the
+  reporter could not get it fixed.  Upstream left the issue open to
+  improve the message.
+
+  getrestype() in src/utils.c is where it lands.  Say what was actually
+  wrong -- that the resource exists but did not report itself as a
+  collection -- and point at -t, which is the workaround.
+
+* #58 is not a bug report; it is an offer of help from a university
+  open source programme office.  Nothing to do.
+
+Upstream pull requests
+======================
+
+* #74, "Misc changes", open.  Three parts.  The neon update to 0.37.1
+  is already here.  The other two are worth taking:
+
+   - src/commands.c: propname_iterator() prints its names with a plain
+     space, where `propget' and `head' use the bullet.  Making them
+     consistent changes the expected transcripts, so do it with
+     --regenerate and read the diff.
+   - src/cadaver.c: a ne_version_match(0, 29) check at startup.  With a
+     statically linked bundled neon this can never fire, so it is
+     documentation rather than a check -- take it only if the tree ever
+     grows a way to build against a system neon.
+
+  Every other pull request upstream is merged or closed.
+
+Found while porting
+===================
+
+Things this fork noticed and did not fix, because they are behaviour
+changes rather than portability work.
+
+* `unlock' on a resource with no stored lock prompts "Enter locktoken:"
+  and, at end of input, gives up without a word: no message, no failure
+  line, nothing in the transcript to distinguish it from success.  See
+  execute_unlock() in src/commands.c, the `goto unlock_fail' path.
+
+* `discover' reports "no locks found" whether the server returned an
+  empty lockdiscovery or did not support the request.  Those deserve
+  different messages.
+
+* `put' names its destination in URI form and every other command names
+  it in native form.  Uploading a file called "has space.txt" reports
+
+    Uploading has space.txt to `/paths/has%20space.txt'
+
+  where `delete' on the same resource reports `/paths/has space.txt'.
+  simple_put() passes the already-resolved URI path to output()
+  directly; every other command goes through out_start_uri(), which
+  converts it back.  tests/expected/*/paths.txt records the current
+  behaviour, so fixing it means regenerating those.
+
+* Failure paths leak.  Most commands build URLs with ne_concat and
+  return early without freeing them.  It is memory only, in a process
+  that is about to read another command rather than exit, so a long
+  session with many failures grows.  Cleaning it up properly means a
+  cleanup path per command.
+
+* `lls' accepts only -l.  It is cadaver's own listing now rather than a
+  forked ls, so anything else -- -a, -t, -S -- has to be implemented
+  rather than passed on.  -a is the one worth having: the listing hides
+  nothing today, so -a would have to become the non-default.
+
+* The progress indicator prints one dot per transfer callback when the
+  output is not a terminal, so a large transfer produces a line of
+  hundreds of dots in a log.  tests/normalise.py collapses them for the
+  expected transcripts.  Consider a byte count instead when the output
+  is not a terminal.
+
+* Tab completion has not been exercised in a real Windows console.  It
+  works when input is piped, which is what the tests cover, and
+  readline 8.3 from MSYS2 does support the Windows console, but nobody
+  has sat in front of cmd.exe and pressed Tab through a remote
+  completion.  Do that before the first release.
+
+* The `search' and DeltaV commands (version, checkin, checkout,
+  uncheckout, history, label) are exercised by neither test server,
+  because neither implements DASL or DeltaV.  They are compiled and
+  linked and otherwise unverified.  Finding a third server that does
+  would be the way to cover them; until then, treat any change there as
+  untested.
+
+From upstream's own TODO
+========================
+
+Upstream's TODO was mostly a wish list from the early 2000s.  What is
+still worth doing:
+
+* `rget' and `rput' for recursive download and upload, creating
+  collections as needed.  This is the most-requested missing feature
+  and the reason people reach for sitecopy or rclone instead.
+
+* Abort a transfer in progress.  Ctrl-C during a `get' of a large file
+  currently kills cadaver.
+
+* `copy' and `move' over an existing resource fail with 412 rather than
+  prompting or reporting clearly.
+
+* `ls' is inflexible: one format, one collection at a time, no way to
+  choose which properties are shown.  A --format or a `set lsformat'
+  would make it useful for scripts -- although a proper --json output
+  would serve that better, so do that first.
+
+* A resource-state cache for the duration of one command.  cadaver
+  makes a PROPFIND to decide whether a path is a collection, and does
+  it repeatedly within one command: `copy a b c dest' resolves the
+  destination once and every source separately.  A small hash keyed by
+  URI, discarded at the end of each command, would cut the request
+  count noticeably on a slow link.
+
+* Upload on save from the editor, so that `edit' with a long-running
+  editor pushes each save rather than only the final one.  Requested in
+  2001 and never done; a file watcher would do it now.
+
+Things that were looked at and deliberately not done
+====================================================
+
+* Keeping NLS.  cadaver had Spanish and Italian translations and a
+  gettext build.  A single self-contained executable cannot carry a
+  locale directory, and a translated build would need the .mo files
+  installed next to it, which is the opposite of what this fork is for.
+  The _() and N_() macros are still in the source and resolve to the
+  identity, so no message has been lost.  Bringing it back means
+  restoring the po directory and its Makefile.in.in from upstream's
+  history, the gettext and iconv macros in m4, AM_GNU_GETTEXT in
+  configure.ac, and a LOCALEDIR for src/cadaver.c to hand
+  bindtextdomain() -- that call is still there under #ifdef ENABLE_NLS
+  and would not compile without one.
+
+* Keeping the bundled glibc glob.  It is 35707 bytes (34.9 KiB) of
+  1998 glibc, needs fnmatch, pwd.h and a d_type that Windows does not
+  have, and its interrupt support was inside #ifdef SHELL, which was
+  never defined -- so the Ctrl-C handling cadaver installed around it
+  had never worked.  lib/glob.c is a third the size, has unit tests,
+  and handles Windows separators and case-insensitivity.
+
+* Emitting LF rather than CRLF on standard output.  cadaver writes its
+  output in text mode, so a Windows console and a Windows editor both
+  see what they expect.  Transfers are unaffected: `put', `get' and
+  `edit' are binary throughout, and `cat' switches its own output to
+  binary for the length of the transfer.  tests/normalise.py strips
+  carriage returns, so the expected transcripts do not depend on it.
+
+* Sorting `ls' output differently.  ls.c sorts errors first, then
+  collections, then by URI, which is what upstream does and what the
+  expected transcripts record.  Changing it is a user-visible choice
+  that should be a `set' option rather than a new default.
+
+* An MSVC build.  Everything here assumes GCC: the warning set, the
+  __attribute__ annotations in neon, the makefiles.  MinGW-w64 produces
+  a native Windows binary with no runtime dependency on MSYS2, which is
+  what the port needed; MSVC would add a second toolchain to support
+  for no gain the users can see.
+
+Cutting a release
+=================
+
+Bump VERSION, regenerate the checked-in configuration if the neon
+version or anything else configure records has moved:
+
+  ./win32/regen-config.sh
+
+commit, wait for CI to go green on that commit, then
+
+  git tag -a vX.Y-winN
+  git push origin vX.Y-winN
+
+The tag must be annotated and its name must be "v" plus VERSION
+exactly, or the release job refuses to run.  It also refuses if a
+release with that tag already exists, and it checks both before it
+uploads anything, so a good release cannot be overwritten by accident.
+The workflow copies the tag's message above the generated notes, so the
+tag message is the release description.
+
+Do not quote the built executable's size in a tag message: it is not
+known until CI has built it, and it moves with the OpenSSL, expat and
+readline versions the runner happens to have.
+
+Afterwards, confirm the fixed URL resolves and the binary runs:
+
+  curl -fsSL -o cadaver.exe https://github.com/Azathothas/cadaver-windows/releases/latest/download/cadaver.exe
+  ./cadaver.exe --version

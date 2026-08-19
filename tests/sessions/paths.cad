@@ -1,0 +1,17 @@
+# Local paths and names with a space in them.  They need quoting, and on
+# Windows they also prove that a backslash in a path is a separator
+# rather than an escape: @WORK@ is an absolute native path.
+lcd @WORK@
+lpwd
+lcd "with space"
+lpwd
+lls
+put "has space.txt"
+ls
+get "has space.txt" "fetched space.txt"
+lls
+delete "has space.txt"
+ls
+lcd @WORK@
+lpwd
+quit

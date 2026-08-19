@@ -1,0 +1,17 @@
+# LOCK and UNLOCK, and the lock store cadaver keeps for the session.
+lcd @WORK@
+mkcol locked
+cd locked
+put hello.txt
+showlocks
+lock hello.txt
+showlocks
+discover hello.txt
+unlock hello.txt
+showlocks
+lock hello.txt
+steal hello.txt
+unlock hello.txt
+cd ..
+rmcol locked
+quit

@@ -1,0 +1,9 @@
+# The expected transcripts in tests/expected are compared line for line
+# after tests/normalise.py has stripped carriage returns, so git must not
+# rewrite their line endings on checkout, whatever core.autocrlf says.
+tests/expected/** -text
+
+# The session scripts are read by cadaver itself, which shaves CR and LF
+# from each line, so their endings do not matter to it -- but keeping
+# them stable keeps the transcripts stable too.
+tests/sessions/** -text

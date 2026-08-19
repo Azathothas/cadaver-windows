@@ -1,0 +1,33 @@
+Creating `g': succeeded.
+[Matching... 2 matches.]
+Uploading hello.txt to `/glob/g/hello.txt': [.. succeeded.
+Uploading second.txt to `/glob/g/second.txt': [.. succeeded.
+Listing collection `/glob/g/': succeeded.
+        hello.txt                             28  <DATE>
+        second.txt                            16  <DATE>
+Creating `keep': succeeded.
+[Matching... 2 matches.]
+Copying `/glob/g/hello.txt' to `/glob/g/keep/hello.txt': succeeded.
+Copying `/glob/g/second.txt' to `/glob/g/keep/second.txt': succeeded.
+Listing collection `/glob/g/keep/': succeeded.
+        hello.txt                             28  <DATE>
+        second.txt                            16  <DATE>
+[Matching... 2 matches.]
+Copying `/glob/g/hello.txt' to `/glob/g/keep/hello.txt': succeeded.
+Copying `/glob/g/second.txt' to `/glob/g/keep/second.txt': succeeded.
+Listing collection `/glob/g/keep/': succeeded.
+        hello.txt                             28  <DATE>
+        second.txt                            16  <DATE>
+[Matching... 2 matches.]
+Deleting `/glob/g/keep/hello.txt': succeeded.
+Deleting `/glob/g/keep/second.txt': succeeded.
+Listing collection `/glob/g/keep/': collection is empty.
+Deleting collection `/glob/g/keep/': succeeded.
+[Matching... 2 matches.]
+Deleting `/glob/g/hello.txt': succeeded.
+Deleting `/glob/g/second.txt': succeeded.
+Listing collection `/glob/g/': collection is empty.
+[Matching... no matches.]
+Uploading nosuch*.txt to `/glob/g/nosuch*.txt': Could not open file: Invalid argument
+Deleting collection `/glob/g/': succeeded.
+Connection to `127.0.0.1' closed.

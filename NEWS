@@ -1,0 +1,556 @@
+Changes in the Windows fork (https://github.com/Azathothas/cadaver-windows).
+Entries below this section are upstream's.
+
+Changes in version 0.28-win1:
+* cadaver builds and runs on Windows as a native MinGW-w64 program: no
+  Cygwin runtime, no WSL, no MSYS2 needed at run time. A release is one
+  statically linked cadaver.exe that depends only on DLLs that ship
+  with Windows.
+* Binary transfers are no longer corrupted. Every open() and fopen()
+  cadaver makes for a transfer now asks for binary mode on any platform
+  that translates line endings, not only on OS/2 and Cygwin. Without
+  this every `put', `get', `edit' and `cat' of anything that is not
+  plain text gained a carriage return before each newline on Windows.
+* The character encoding of the terminal is worked out from the console
+  code page rather than from nl_langinfo(), which Windows does not
+  have. The console is switched to UTF-8 for the lifetime of the
+  process and put back at exit, so names outside ASCII survive both
+  ways. The fallback that would have been compiled on a platform
+  without nl_langinfo() never compiled at all: it had a stray `||' in
+  it, which is why nobody had built cadaver on such a platform.
+* The command line is re-decoded from the wide form on Windows, so an
+  argument that the active ANSI code page cannot represent still
+  reaches cadaver intact.
+* Paths:
+ - The home directory comes from $HOME, then the Windows profile
+   directory, so ~/.cadaverrc, ~/.netrc and ~/.cadaver-locks are found
+   without $HOME being set by hand.
+ - A backslash in a command is an ordinary character on Windows,
+   because it is the path separator, so `lcd C:\Users\me' and
+   `lls C:\dir\*' both work.  Quotes are the way to write a name
+   containing a space or a hash there; elsewhere a backslash still
+   quotes the character after it, so `get my\ file' is unchanged.
+ - base_name() understands both separators and a drive prefix, so
+   `put C:\dir\file.txt' uploads to `file.txt' rather than to a name
+   containing the whole path.
+ - `edit' puts its temporary file in the directory Windows nominates
+   rather than in /tmp, and quotes the file name when it runs the
+   editor, which the Windows temporary directory routinely needs.
+* Commands that needed a Unix to work:
+ - `lls' lists the directory itself, in the layout the remote `ls'
+   uses, rather than forking an `ls' that Windows has neither the call
+   nor the program for. It takes an optional directory and -l.
+ - `less' opens the pager with _popen() in binary mode; the default is
+   $PAGER, then more, which ships with Windows.
+ - `edit' runs $VISUAL, then $EDITOR, then notepad.
+ - `cat' puts its own standard output into binary mode for the length
+   of the transfer, so a resource arrives on the far end of a pipe
+   byte for byte.
+ - The password prompt turns echo off through the console handle
+   rather than through termios, and restores it on the way out and
+   from the SIGINT handler.
+* Filename globbing is a new implementation, lib/glob.c, replacing the
+  copy of glibc's glob from 1998. It supports *, ?, [set], [a-z],
+  [!set] and POSIX character classes, honours GLOB_ALTDIRFUNC so that
+  remote expansion is unchanged, treats a backslash as a separator
+  rather than a quote when matching the local file system on Windows,
+  and matches case-insensitively there. Results are sorted. A literal
+  path segment is joined on without reading a directory, so a pattern
+  costs one PROPFIND per collection it actually has to expand.
+ - Interrupting a slow remote expansion with Ctrl-C now works. The old
+   code set a flag that the bundled glob only read under #ifdef SHELL,
+   which was never defined.
+* One executable and one version. VERSION at the top of the tree is
+  read by configure and by Makefile.w32, so the two build paths cannot
+  report different numbers.
+* Tests, where there were none:
+ - tests/offline.sh: 18 checks that need no server, no network and no
+   Python.
+ - tests/glob.sh: 48 unit tests for lib/glob.c, against a synthetic
+   directory tree and a real one.
+ - tests/godav.sh and tests/wsgidav.sh: ten scripted sessions run
+   against golang.org/x/net/webdav and against wsgidav, with the
+   transcripts compared against checked-in expected output. Neither
+   server is complete on its own: x/net/webdav locks correctly but has
+   no dead property store, wsgidav has dead properties but answers
+   LOCK with a Content-Type that is not a media type. Both gates run
+   in CI.
+* Bug fix: `help' ended its command list with a carriage return when
+  the last row was short, which ran the aliases line into the last
+  command on a terminal and left a stray CR in a redirected
+  transcript.
+* Bug fix: `edit' judged whether the file changed by its timestamp
+  alone, so an edit made and saved within the same second was reported
+  as no change and never uploaded. The size is compared as well.
+* Bug fix: cad_mkstemp() required the XXXXXX at the very end of the
+  template, but `edit' appends the resource's extension after it, so
+  every `edit' of a resource with an extension failed to create its
+  temporary file.
+* Bug fix: the remote directory reader leaked the converted name of
+  every entry it returned, so a tab-completion or a remote glob leaked
+  once per entry.
+* Bug fix: a file size over 2 GiB is read with a 64-bit stat, so `lls'
+  reports it correctly and `resumeget' resumes from the right offset
+  rather than from a truncated one.
+* Build: the bundled getopt, snprintf, strcasecmp, strftime, fnmatch,
+  tempname and expat copies are gone, along with the unused dirname.
+  mingw-w64 and every libc cadaver has ever built against provide the
+  first four; the glob rewrite removed the need for fnmatch; nothing
+  called dir_name(); lib/expat was a copy of expat from 1999 that no
+  build rule referenced.
+* Build: NLS is not built. The translations needed gettext at build
+  time and a locale directory at run time, which a single self-
+  contained executable cannot carry. The _() macros are still in the
+  source and still resolve to the identity, so the strings are ready
+  if it is ever wanted back.
+* Documentation: README.md, AGENTS.md, PATCHES.md, TODO, INSTALL, FAQ
+  and the manual page were all rewritten for this fork.  INSTALL was
+  the generic autoconf text, which sent at least one reporter looking
+  for a configure script inside src/ (upstream issue 72); it now says
+  what to install and which two commands to run.  TODO records every
+  open upstream issue with an analysis of what is actually wrong.
+* neon 0.37.1 is bundled as ordinary files rather than as a submodule,
+  with four portability patches. See PATCHES.md.
+
+Changes in release 0.28:
+* Add 'resumeget', 'head' commands.
+* Cosmetic tweak for 'propget' command.
+* Allow using 'edit' on an already-locked resource.
+* 'edit' uses a conditional PUT (where possible) to avoid conflicts.
+
+Changes in release 0.27:
+* Opening a location which does not indicate DAV class 1 support
+  is now an error (or a warning in tolerant mode).
+* Removed obsolete BUGS, INTEROP, FAQ documents.
+* Fixed memory leaks in 'cat', 'less' commands.
+* Rewrite of remote tab-completion to work for arbitrary paths.
+* Fixes and improvements for glob (filename expansion) support:
+ - glibc glob() will be used if available in preference to bundled code.
+ - remote wildcards are now expanded across paths (e.g. 'rm */*.html').
+* Add client-cert-uri option for neon 0.35+.
+* Update bundled neon to 0.35.0; neon 0.29.x or later required.
+
+Changes in release 0.26:
+* Argument passed to "cadaver" must now be an absolute URI,
+  various pseudo-URLs are now treated as errors.
+* Rewrite of path and character set handling, fixing support
+  for locales using non-UTF-8 character encoding:
+ - URI paths are translated to/from the native character encoding
+ - nl_langinfo() used to detect UTF-8 locale support
+ - full relative path resolution is now done for paths
+ - "get" now uses a locale-native default filename (issue #33)
+ - iconv (or libiconv) is required for non-UTF-8 native locales
+* Fix memory leak in remote filename completion.
+* Various commands will now automatically act on the destination
+  of a redirect as required rather than failing.
+* Rewrite of 'copy' and 'move' commands:
+ - a source collection is moved/copied inside a destination coll
+   rather than overwriting it.
+ - more error cases are disallowed (e.g. 'mv / /foo')
+ - a source collection with a non-collection destination now fails
+* New 'rename' command added for MOVE with 'Overwrite: F'
+ - this ignores the 'overwrite' boolean option unlike cp/mv
+* Various minor command fixes:
+ - propget: output improved for clarity.
+ - rmcol: lock handling on error path fixed.
+ - less: catch errors from pager command.
+* Added 'systemproxy' option to enable libproxy.
+* Update to neon 0.34.0.
+
+Changes in release 0.25:
+* Support bundled neon build again.
+
+Changes in release 0.24:
+* Modernize configure scripts (Hugh McMaster)
+ - fixing cross-compilation support
+* Various spelling fixes (Hugh McMaster)
+* Cosmetic fix for "cat" output
+* Bundled neon support is not supported
+* Support building against neon up to 0.32
+
+Changes in release 0.23.3:
+* Update to neon 0.29.1.
+
+Changes in release 0.23.2:
+* Fix "make install" with NLS builds.
+
+Changes in release 0.23.1:
+* Update to neon 0.28.0.
+
+Changes in release 0.23.0:
+* Update to neon 0.27.0; drop support for older versions of neon.
+* Fix "search contains" (thanks to Jack Bates)
+* Add DESTDIR support to "make install" (Dr Volker Zell)
+
+Changes in release 0.22.5:
+* Update to neon 0.26.3:
+ - fix security issue in URI parser, CVE-2007-0157
+* Document netrc support in man page (Sebastian Harl)
+
+Changes in release 0.22.4:
+* Update to neon 0.26.2 (thanks to Peter O'Gorman).
+* Fixes for OS/2 EMX (Andrew Belov).
+
+Changes in release 0.22.3:
+* Update to neon 0.25.4:
+ - fix support for handling multiple authentication challenges
+ - add support for the Negotiate (GSSAPI/Kerberos) protocol
+* Enable i18n support again.
+
+Changes in release 0.22.2:
+* Fix build issues on AIX (Tony Bennett).
+* Fix DeltaV commands on locked resources.
+* Update to neon 0.24.6:
+ - SECURITY (CVE CAN-2004-0398): fix for sscanf overflow in date parsing
+
+Changes in release 0.22.1:
+* Restore DASL/DeltaV support (GRASE team).
+* Fix to only use netrc on first attempt at authentication.
+* Update to neon 0.24.5:
+ - SECURITY (CVE CAN-2004-0179): fix for format string vulnerabilities
+
+Changes in release 0.22.0:
+* Fix build on BSD platforms, or if using bundled expat library.
+* Fixes for some URI encoding issues.
+* Update to neon 0.24.1:
+ - only support PKCS#12-encoded client certs, using the "client-cert" option.
+* Support --with-libs argument to configure.
+* (Drop DASL/DeltaV support temporarily).
+
+Changes in release 0.21.0:
+* Added DASL searching and DeltaV basic versioning support, contributed
+ by the GRASE team <grase@cse.ucsc.edu>.  New commands 'version',
+ 'checkin', 'checkout', 'uncheckout', 'label', 'history', 'search'.
+* Enable netrc support by default.
+* Fix 'mput' for filenames with spaces.
+
+Changes in release 0.20.5:
+* Fix 'edit' on a path like `/one.two/three'
+* Updated to neon 0.23.0:
+ - IPv6 support if getaddrinfo() is supported, based on work by
+ Noriaki Takamiya <takamiya@po.ntts.co.jp>
+ - for a hostname with multiple addresses, each address is tried in turn
+ until a connection is made.
+ - support for seeding OpenSSL's PRNG via $EGDSOCKET or $HOME/.entropy,
+ to enable SSL on platforms which lack a /dev/random device.
+ - fix interop with buggy SSL implementation in Tomcat 3.2.
+ - RFC2818 compliance for certificate identity checks in SSL
+
+Changes in release 0.20.4:
+* Fix segfault in resolve_path (Dan Mullen).
+* Update to final neon 0.22.0 release:
+ - persistent connection handling fixes
+ - require OpenSSL >=0.9.6f for latest security fixes
+ (use --with-force-ssl to override the version check)
+
+Changes in release 0.20.3:
+* Fix for segfault if SSL is used with a proxy server,
+
+Changes in release 0.20.2:
+* Quiet mode is now on by default.
+* Portability fixes for lib/tempname.c build.
+* Require OpenSSL 0.9.6e or later for SSL support.
+
+Changes in release 0.20.1:
+* Fix for configure not finding po/Makefile.in.
+
+Changes in release 0.20.0:
+* Changes to 'edit' command:
+ - use extension of URI in temporary file name, to help the editor
+ determine the file type.
+* Fix local filename prompt for 'get'.
+* configure quoting fixes for Solaris etc.
+* Add 'pager' option to set pager command for 'more'/'less' commands.
+* Make 'unset debug' clear all debugging flags rather than segfault.
+* Nicer 'set' output.
+* Upgrade to neon 0.22.0-dev:
+ - many SSL improvements, including prompt for untrusted certs
+ - load default CA certs provided by OpenSSL.
+ - SOCKSv5 support (thanks to Torsten Kalix <torsten.kalix@bredex.de>)
+ - fix 'ls' output corruption when server gives 404 for getlastmodifed
+ or getcontentlength properties (e.g. mod_dav_svn).
+ - fix support for newer libxml2 releases.
+
+Changes in release 0.19.1:
+* Fix permissions of local file downloaded using 'get' (Dan Mullen).
+* Add man page (Jules <jules@jules.com>)
+* Fix build on Mac OS X 10.1.
+* lockdepth option is used for any non-collection resource.
+* Add 'quiet' option; when set, connection status messages are 
+ suppressed.
+
+Changes in release 0.19.0:
+* Remote filename completion from Sean Treadway <seant@superchannel.org>.
+* Cosmetic and bug fixes for 'steal' and 'discover' commands.
+* Added 'propdel' command to remove properties.
+* Added 'overwrite', 'lockdepth', 'lockscope' options from dan@mullen.net.
+* Fix for resolving paths passed to 'ls' command (e.g. "..").
+* Retry authentication once if it fails.
+* Fixes for readline 4.2 compatibility:
+ - may have broken readline 2 compatibility; please shout if so!
+* Add mkstemp() replacement for platforms where necessary.
+* Incorporate RPM spec file changes from Red Hat (by Nalin Dahyabhai).
+* Updated to neon 0.18:
+ - timezone handling fixes in date parsing on some platforms
+ - fixes for lock handling
+ - portability fixes
+
+Changes in release 0.18.0:
+* Added 'logout' command, to clear cached authentication details.
+* Added 'propnames' command.
+* Added 'utf8' option, to presume terminal I/O is UTF-8. e.g. xterm -u8
+  mode.
+* Handle UTF-8 encoding/decoding of property names/values better when not 
+  in utf8 mode.
+* Added FAQ entry on how to read your HotMail e-mail using cadaver.
+* Updated to neon 0.16:
+ - libxml2, expat2 support (can force with --with-libxml[12])
+ - Untested SOCKSv5 support (--with-socks)
+* Fix 'ls' listing the 'executable' property.
+* Disable i18n support by default to prevent portability problems.
+* Added FAQ entry on using 'edit' with gvim.
+
+Changes in release 0.17.0:
+* Support for PEM-encoded SSL client certificates, options 'cert' and 'certkey'
+  For example:
+   set cert /some/where/me.crt
+   set certkey /some/where/me.key
+* Fix remote glob expansion.
+* Fix --enable-netrc.
+* Fix possible SEGV from propget if server did not return a response for
+  the requested property.
+* Make property name argument to propget optional: if it is omitted, 
+  all properties defined on the resource will be displayed.
+* Added 'propset' command, for setting custom properties. e.g. 
+    propset myfile.txt creator "Jim Bloggs"
+* Added 'namespace' option, which is used as the property namespace for
+  propset and propget commands.
+* neon updated to 0.12:
+ - Fix interop problem against Xythos servers when using libxml parser.
+
+Changes in release 0.16.0:
+* Added 'propget' command.
+* Fix for lib/glob.c compile problem on FreeBSD 4.x systems (and 
+  probably elsewhere).
+* Improvements in readline library detection.
+* Allow the 'edit' command to create a new resource (patch by Tres Seaver 
+  <tseaver@digicool.com>).
+* Disallow 'edit' on a collection.  Use mkstemp() to create temporary
+  file, to avoid /tmp races.
+* neon updated to 0.10:
+ - Improved --with-ssl to check in /usr as well.
+ - Fix bugs and leaks in locking code.
+ - Build not dependent on GNU make any more
+
+Changes in release 0.15.4:
+* Disallow using 'showlocks' when not connected.
+
+Changes in release 0.15.3:
+* Fix segfaults when using locking code.
+
+Changes in release 0.15.2:
+* Correct handling of non-default ports with SSL (Jeff Costlow
+  <j.costlow@f5.com>)
+  - Should fix "infinite loop on connect behaviour"
+* Updated neon:
+  - Various SSL fixes (thanks to Jeff Costlow and David Sloat)
+
+Changes in release 0.15.1:
+* Ensure that a collection URL has a trailing slash before cd/open'ing it.
+* Fix for SEGV from 'get' when the local file already exists, and the
+  readline() replacement is being used.
+
+Changes in release 0.15.0:
+* Requires neon 0.7.2.
+* Fix link failure due to double lib/snprintf.o.
+* If 'delete' fails, don't forget any locks on the resource.
+* Fixes for BeOS from David Reid <david@jetnet.co.uk>.
+* Use a replacement getpass() function from fetchmail (thanks to Carl Harris
+  who wrote the original code).
+* Follow automatic 302/301 redirects (only on the same host).
+
+Changes in release 0.14.1:
+* Fixes for readline support:
+  - Check for presence of 'filename_completion_function'.
+  - Don't use xmalloc etc symbols which clash with readline.
+* Fixes for 'edit' command.
+* Fix for 'lock' which was creating a shared lock not an exclusive one.
+* Remove cookies support which was accidentally added.
+
+Changes in release 0.14.0:
+* Ported to neon HTTP/WebDAV client library. Build against bundled copy,
+  or separate 0.4.0 or later (specify location with --with-neon=...).
+* SSL support (if built into neon); use https: URL.
+* Support for 'isexecutable' property according to the mod_dav schema:
+  - Print a "*" before name in 'ls' listing if a resource's 
+    isexecutable property is true.
+  - New 'chexec' command.
+* New '--disable-readline' configure option to unconditionally
+  disable readline support.
+* Internationalization of user-visible messages.
+
+Changes in release 0.13.2:
+* Handle empty elements in PROPFIND response
+
+Changes in release 0.13.1:
+* Build fix: added strndup() replacement.
+
+Changes in release 0.13.0:
+* Persistent connection handling improved (better HTTP/1.0 support).
+* Support proxy servers, with --proxy=server.com:port, or
+  proxy/proxy-port options.
+* Support proxy authentication (basic or digest).
+* Digest authentication improvements.
+
+Changes in release 0.12.2:
+* Compile fix
+* Report errors correctly for PROPFIND failure cases.
+* Locking fix
+* Some modules of DAV client code are now offered under the LGPL
+  as an alternative to the GPL.
+
+Changes in release 0.12.1:
+* Path handling fixes
+* Build fix
+* Allow #-commented lines in rcfile
+
+Changes in release 0.12.0:
+* 'ls' listings sorted, clearer.
+* Percentage-complete progress bar for upload/download.
+* Cleaner and more consistent output: less intrusive connection status
+  messages ("Connecting to server..." etc).
+* Several locking fixes.
+* Added missing Content-Type in some requests (better against PyDAV).
+* Tab completion for command names.
+* New editor option, overrides $EDITOR for the 'edit' command.
+* RPM .spec file contributed by Lee Mallabone <lee0@callnetuk.com>.
+* Prompt changes to a '?' if in a non-DAV-enabled collection.
+* Built-in dumb readline() replacement used if none on system.
+* Bug and memory leak fixes.
+
+Changes in release 0.11.0:
+* New lockowner option, a URI to identify the user.
+* Default to using a lockowner of "mailto:$USER@$HOSTNAME"
+* rcfile: any commands listed in $HOME/.cadaverrc are run at startup.
+   e.g. set lockowner http://www.my.com/homepage/
+* New 'edit' command, does LOCK/GET/edit using $EDITOR/PUT/UNLOCK -
+  thanks to Brendan Quinn for the suggestion.
+* Don't send empty 'If:' header (works against IIS5 again).
+* Fixes for 207 response handling (works against MyDocsOnline).
+* Ignore unwanted properties in PROPFIND response (works against DriveWay).
+* Don't send an extra newline after a request body (works against PyDAV).
+* Recognise resources of type DAV:redirectref.
+* Accept a URL on the command-line, e.g. 'cadaver http://wherever.com/'
+* Many cosmetic changes and bug fixes.
+
+Changes in release 0.10.0
+* Improved locking support.
+* 'If' headers should be correct for all cases.
+* Better error messages for 207 failure responses to standard DAV methods.
+* Support libxml as XML parser.
+* Rewrite of XML response handling.
+* Debian packaging information from Bernd Eckenfels.
+
+Changes in release 0.9.0
+* Skeleton locking support using 'lock' and 'unlock' commands.
+  (exclusive locks only, no depth 0 for collections)
+* Lock-tokens supplied via 'If' headers as needed (limited support).
+* Lock discovery using 'discover' command (depth 0 only).
+* Steal a locktoken using 'steal' command.
+* 'showlocks' to display list of currently owned locks.
+
+Changes in release 0.8.0
+* Better output messages: only display HTTP Status-Line on error.
+* Added 'install' target to Makefile.
+* Check for ncurses if curses isn't found.
+* Fix local globbing again (thanks to Ulrich Drepper).
+* Test for "is a collection" actually checks resource type.
+* 'delete' will only delete non-collection resources.
+* New command: 'rmcol', to delete collection resources.
+ (rationale: cadaver 'rm' was previously equivalent to Unix 'rm -r')
+
+Changes in release 0.7.3
+* Yet more little portability fixes
+
+Changes in release 0.7.2:
+* More portability fixes.
+
+Changes in release 0.7.1:
+* Pick up CC from configure.
+* Fixes for building snprintf.
+
+Changes in release 0.7.0:
+* Better remote globbing: thanks to GNU for their glob() extensions.
+  So, you can now do things like "mv /*/*.html /foo/bar/".
+* Do remote or local globbing depending on the command in use.
+* Several memory leaks fixed: thanks to Owen Taylor for the excellent 
+  memprof tool.
+* New commands: 'mget' and 'mput': for batch file downloads/uploads.
+* 'copy' can take multiple arguments. (e.g. "cp *.html /wherever/")
+
+Changes in release 0.6.0:
+* Check for a DAV-enabled collection is now a PROPFIND with Depth=0.
+* Run-time option selection: use 'set' and 'unset'.
+* Can only 'cd' or 'open' into a DAV-enabled collection, unless
+  'tolerant' option is set.
+* New --tolerant (or -t) option.
+* New options interface: 'set', 'unset' commands.
+* New command line parser: 
+  - handles quotes, so you can do "rm 'foo bar'"
+  - backslash literal escaping, so you can do "rm foo\ bar"
+  - and BASIC globbing on remote filenames. These will only match
+    against the contents of the current collection, so, for instance,
+    "../*.html" will NOT WORK as intended. Note also that patterns
+    are never matched against LOCAL filenames.
+* New 'echo' command, to test how a globbing pattern expands.
+* move, mkcol, less, cat, delete can all take multiple arguments.
+  Usage, e.g.: "mkcol a b c d e", "rm *.html", "mv *.html /elsewhere"
+* Fixed quitting and problems with multiple 'open's in a session.
+* New per-command help using 'help command'.
+* 'lls' can take multiple arguments.
+
+Changes in release 0.5.0:
+* 'lls' can take a single argument
+* 'cd -' will swap between current and previous collection.
+* 'lcd' with no path changes cwd to $HOME
+* Whitespace in command line ignored.
+* Cosmetic cleanups, and leaks fixed.
+
+Changes in release 0.4.0:
+* Added 'lls', 'lcd', 'lpwd' commands.
+* Added some extra aliases.
+
+Changes in release 0.3.4:
+* Quit on CTRL-D rather than segfault.
+* Added autoconf checks for socket and gethostbyname locations.
+
+Changes in release 0.3.3:
+* Ignore '/../' as a leading segment in paths.
+
+Changes in release 0.3.2:
+* Don't trap CTRL-Z
+* Better handling of '.' in filenames.
+
+Changes in release 0.3.1:
+* Makefile fix, should build with non-GNU 'make' now.
+
+Changes in release 0.3.0:
+* Readline history support.
+* Default to '/' if no path given on 'open', or at startup.
+* 'open' only succeeds for real DAV-enabled collections (i.e., ones where
+  OPTIONS returns '1' in the 'DAV:' header).
+* New commands: move, copy, (both with overwrite: f) cat, less.
+* Won't prompt for username/password twice if you get it wrong the 
+  first time.
+* ~/.netrc support, compile-time option, use not recommended since 
+  your DAV password on a machine probably isn't the same as your FTP password.
+* Misc bug fixes and cosmetic tidyups.
+
+Changes in release 0.2.0:
+* Allow startup with no hostname/path
+* New commands: open, close, get, put, mkcol, delete
+* Cope with `..' in paths.
+* Better feedback on errors, display HTTP status-line when appropriate.
+* A bit of signal handling
+* configure fixes
+

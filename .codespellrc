@@ -1,0 +1,10 @@
+[codespell]
+# The vendored neon is upstream's text, the expected transcripts are
+# generated, and COPYING is the GPL verbatim.  Nothing in any of them
+# is this fork's to correct.
+skip = ./neon,./tests/expected,./COPYING,./config.guess,./config.sub,./install-sh,./configure,./aclocal.m4,./config.h.in,./win32/config.h,./.git,./godav-results,./session-results,./globtest-work,./dav-venv,./davroot
+# checkin: the DeltaV command, spelled that way by the protocol
+# ue:      the .UE macro that ends a URL in a manual page
+# gord:    part of a contributor's address in lib/netrc.c
+# nore:    part of "yesexpr"/"noexpr" wording in lib/rpmatch.c
+ignore-words-list = checkin,ue,gord,nore

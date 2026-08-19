@@ -1,0 +1,19 @@
+# Options, help and the version banner.  Nothing here touches the
+# network beyond the connection cadaver has already made.
+set
+describe lockscope
+set lockscope shared
+set lockdepth 0
+set
+unset lockscope
+unset lockdepth
+set namespace http://example.com/props/
+set
+describe nosuchoption
+set nosuchoption
+help
+help ls
+help nosuchcommand
+about
+pwd
+quit

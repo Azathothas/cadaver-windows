@@ -1,0 +1,9 @@
+Creating `edited': succeeded.
+Uploading hello.txt to `/edit/edited/hello.txt': [.. succeeded.
+Locking `/edit/edited/hello.txt': failed:
+Response missing activelock for (null)
+hello from cadaver
+line two
+Deleting collection `/edit/edited/': failed:
+/edit/edited/hello.txt: 423 Locked
+Connection to `127.0.0.1' closed.

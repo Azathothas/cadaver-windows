@@ -1,0 +1,22 @@
+Listing collection `/basic/': collection is empty.
+Creating `coll': succeeded.
+Listing collection `/basic/': succeeded.
+Coll:   coll                                   0  <DATE>
+Uploading hello.txt to `/basic/coll/hello.txt': [.. succeeded.
+Listing collection `/basic/coll/': succeeded.
+        hello.txt                             28  <DATE>
+hello from cadaver
+line two
+Downloading `hello.txt' to `fetched.txt': [.. succeeded.
+Response status-code 200, headers:
+• accept-ranges: bytes
+• content-length: 28
+• content-type: text/plain; charset=utf-8
+• date: <DATE>
+• etag: <ETAG>
+• last-modified: <DATE>
+Deleting `/basic/coll/hello.txt': succeeded.
+Listing collection `/basic/coll/': collection is empty.
+Deleting collection `/basic/coll/': succeeded.
+Listing collection `/basic/': collection is empty.
+Connection to `127.0.0.1' closed.

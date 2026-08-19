@@ -1,0 +1,20 @@
+# Failure paths: a command that does not exist, a resource that does
+# not exist, and the two commands that refuse to act on the wrong kind
+# of resource.
+nosuchcommand
+ls nosuchcollection
+cd nosuchcollection
+delete nosuchresource
+propget nosuchresource
+mkcol errs
+rmcol errs/nothing
+cd errs
+put hello.txt
+rmcol hello.txt
+cd ..
+delete errs
+rmcol errs
+ls
+put
+ls one two
+quit

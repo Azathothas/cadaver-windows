@@ -1,0 +1,20 @@
+# Dead properties: PROPPATCH to set and remove, PROPFIND to read back.
+# A server with no dead property store fails all of this, which is why
+# the expected output differs between the two test servers.
+lcd @WORK@
+mkcol props
+cd props
+put hello.txt
+propset hello.txt colour blue
+propget hello.txt colour
+propget hello.txt
+propnames hello.txt
+propset hello.txt colour green
+propget hello.txt colour
+propdel hello.txt colour
+propget hello.txt colour
+propset hello.txt unicode ünïcodé
+propget hello.txt unicode
+cd ..
+rmcol props
+quit

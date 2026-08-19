@@ -1,0 +1,27 @@
+Unrecognised command. Type 'help' for a list of commands.
+Listing collection `/errors/nosuchcollection/': failed:
+404 Not Found
+Could not access /errors/nosuchcollection/ (not WebDAV-enabled?):
+404 Not Found
+Deleting `/errors/nosuchresource': failed:
+404 Not Found
+Fetching properties for `nosuchresource': failed:
+404 Not Found
+Creating `errs': succeeded.
+Deleting collection `/errors/errs/nothing': is not a collection.
+The `rmcol' command can only be used to delete collections.
+Use `rm errs/nothing' to delete this resource.
+Uploading hello.txt to `/errors/errs/hello.txt': [.. succeeded.
+Deleting collection `/errors/errs/hello.txt': is not a collection.
+The `rmcol' command can only be used to delete collections.
+Use `rm hello.txt' to delete this resource.
+Deleting `/errors/errs/': is a collection resource.
+The `rm' command cannot be used to delete a collection.
+Use `rmcol errs' to delete this collection and ALL its contents.
+Deleting collection `/errors/errs/': succeeded.
+Listing collection `/errors/': collection is empty.
+The `put' command requires 1 argument:
+  put local [remote] : Upload local file
+The `ls' command takes at most 1 argument:
+  ls [path] : List contents of current [or other] collection
+Connection to `127.0.0.1' closed.

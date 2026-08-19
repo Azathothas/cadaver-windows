@@ -1,0 +1,2 @@
+# What came back must be what went up, name and all.
+cmp "$WORK/with space/has space.txt" "$WORK/with space/fetched space.txt"

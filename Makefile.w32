@@ -1,0 +1,126 @@
+# Makefile.w32 -- standalone Windows build for cadaver.
+#
+# Builds cadaver and the bundled neon on Windows with a MinGW-w64
+# toolchain and GNU make, without needing autotools.  The configuration
+# normally produced by configure is checked in as win32/config.h.
+#
+#   make -f Makefile.w32
+#
+# OpenSSL, expat, readline and iconv are required, and are picked up
+# from the compiler's own search path -- which is what an MSYS2 UCRT64
+# shell already gives you, so no extra configuration is needed there.
+#
+# If they live outside the toolchain, set PREFIX to a sysroot providing
+# all four.  Note that PREFIX must belong to the same toolchain as CC:
+# aiming a standalone MinGW-w64 at another installation's sysroot picks
+# up that installation's C runtime too, and the link fails on mismatched
+# CRT symbols (_gnu_exception_handler and friends).
+#
+# CC, CFLAGS, CPPFLAGS, LDFLAGS and LIBS may all be overridden.
+
+PREFIX  =
+
+CC      = gcc
+AR      = ar
+RANLIB  = ranlib
+RM      = rm -f
+
+CFLAGS  = -g -O2
+
+# The same set configure --enable-warnings turns on, so that a warning
+# is found by whichever build path is run first rather than only by the
+# other one.  OPENSSL_SUPPRESS_DEPRECATED goes with it for the same
+# reason: neon calls OpenSSL 1.x entry points that OpenSSL 3 marks
+# deprecated, and configure suppresses those there too.
+WARN    = -Wall -Wstrict-prototypes -Wmissing-declarations -Wshadow \
+	  -Wreturn-type -Wsign-compare -Wundef -Wpointer-arith \
+	  -Wbad-function-cast -Wformat-security
+
+# The version lives in one file that both build paths read, so that a
+# release cannot report one number here and another under autotools.
+VERSION := $(shell cat VERSION)
+
+# win32/config.h must be found before any generated config.h in the tree,
+# so the top directory is deliberately not on the include path.
+#
+# _LARGEFILE64_SOURCE and NE_LFS are what configure puts in CPPFLAGS
+# rather than in config.h, and neon's ne_off_t is only 64-bit with them.
+# Without them a transfer over 2 GiB would be truncated here and not
+# under autotools, which is exactly the kind of difference between the
+# two build paths that must not exist.
+CPPFLAGS = -Iwin32 -Isrc -Ilib -Ineon/src -DHAVE_CONFIG_H \
+	   -D_LARGEFILE64_SOURCE -DNE_LFS -DOPENSSL_SUPPRESS_DEPRECATED \
+	   -DPACKAGE_VERSION='"$(VERSION)"' \
+	   $(if $(PREFIX),-I$(PREFIX)/include)
+LDFLAGS  = $(if $(PREFIX),-L$(PREFIX)/lib)
+LIBS     = -lreadline -lhistory -ltermcap -lssl -lcrypto -lexpat -liconv \
+	   -lws2_32
+
+# STATIC=1 links everything into the executable, so it runs on a machine
+# that has no MSYS2 runtime and no OpenSSL, expat, readline or iconv
+# DLLs.  This is what the released binaries are built with.
+#
+# XML_STATIC has to be defined for every translation unit that includes
+# expat.h, not just at link time: without it expat's header declares its
+# entry points dllimport and the link fails on __imp_XML_* symbols.
+# OpenSSL's static libraries pull in the Windows crypto and socket
+# libraries directly, hence the longer library list.
+STATIC =
+ifeq ($(STATIC),1)
+CPPFLAGS += -DXML_STATIC
+LDFLAGS  += -static
+LIBS      = -lreadline -lhistory -ltermcap -lssl -lcrypto -lexpat -liconv \
+	    -lws2_32 -lcrypt32 -lbcrypt -ladvapi32 -luser32 -lgdi32
+endif
+
+COMPILE = $(CC) $(CPPFLAGS) $(CFLAGS) $(WARN)
+
+NEON_OBJS = \
+	neon/src/ne_request.o neon/src/ne_session.o neon/src/ne_basic.o \
+	neon/src/ne_string.o neon/src/ne_uri.o neon/src/ne_dates.o \
+	neon/src/ne_alloc.o neon/src/ne_md5.o neon/src/ne_utils.o \
+	neon/src/ne_socket.o neon/src/ne_auth.o neon/src/ne_redirect.o \
+	neon/src/ne_compress.o neon/src/ne_i18n.o neon/src/ne_pkcs11.o \
+	neon/src/ne_socks.o neon/src/ne_ssl.o neon/src/ne_207.o \
+	neon/src/ne_xml.o neon/src/ne_props.o neon/src/ne_locks.o \
+	neon/src/ne_xmlreq.o neon/src/ne_openssl.o
+
+CAD_OBJS = src/cadaver.o src/common.o src/commands.o src/ls.o \
+	   src/cmdline.o src/options.o src/utils.o src/edit.o \
+	   src/version.o src/search.o
+
+LIB_OBJS = lib/basename.o lib/glob.o lib/rpmatch.o \
+	   lib/yesno.o lib/getpass.o lib/mkstemp.o lib/netrc.o lib/system.o
+
+HDRS = src/cadaver.h src/cmdline.h src/commands.h src/common.h \
+       src/i18n.h src/options.h src/utils.h \
+       lib/basename.h lib/getpass.h lib/glob.h \
+       lib/netrc.h lib/system.h win32/config.h
+
+PROGS = cadaver.exe
+
+all: $(PROGS)
+
+libneon.a: $(NEON_OBJS)
+	$(RM) $@
+	$(AR) cr $@ $(NEON_OBJS)
+	$(RANLIB) $@
+
+.SUFFIXES:
+.SUFFIXES: .c .o
+
+.c.o:
+	$(COMPILE) -c $< -o $@
+
+$(NEON_OBJS): win32/config.h
+$(CAD_OBJS): $(HDRS)
+$(LIB_OBJS): $(HDRS)
+
+cadaver.exe: $(CAD_OBJS) $(LIB_OBJS) libneon.a
+	$(CC) $(LDFLAGS) -o $@ $(CAD_OBJS) $(LIB_OBJS) -L. -lneon $(LIBS)
+
+clean:
+	$(RM) $(NEON_OBJS) $(CAD_OBJS) $(LIB_OBJS)
+	$(RM) libneon.a $(PROGS)
+
+.PHONY: all clean

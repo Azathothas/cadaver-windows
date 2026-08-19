@@ -1,0 +1,28 @@
+Creating `props': succeeded.
+Uploading hello.txt to `/props/props/hello.txt': [.. succeeded.
+Setting property on `hello.txt': succeeded.
+Fetching properties for `hello.txt':
+Value of colour is: blue
+Fetching properties for `hello.txt':
+• DAV:creationdate = <DATE>
+• DAV:displayname = hello.txt
+• DAV:getcontentlength = 28
+• DAV:getcontenttype = text/plain; charset=utf-8
+• DAV:getetag = <ETAG>
+• DAV:getlastmodified = <DATE>
+• DAV:lockdiscovery = 
+• DAV:resourcetype = 
+• DAV:supportedlock = <DAV:lockentry><DAV:lockscope><DAV:exclusive></DAV:exclusive></DAV:lockscope><DAV:locktype><DAV:write></DAV:write></DAV:locktype></DAV:lockentry><DAV:lockentry><DAV:lockscope><DAV:shared></DAV:shared></DAV:lockscope><DAV:locktype><DAV:write></DAV:write></DAV:locktype></DAV:lockentry>
+• http://webdav.org/cadaver/custom-properties/colour = blue
+Fetching property names for hello.txt:
+Setting property on `hello.txt': succeeded.
+Fetching properties for `hello.txt':
+Value of colour is: green
+Deleting property on `hello.txt': succeeded.
+Fetching properties for `hello.txt':
+Could not fetch property: 404 Not Found
+Setting property on `hello.txt': succeeded.
+Fetching properties for `hello.txt':
+Value of unicode is: ünïcodé
+Deleting collection `/props/props/': succeeded.
+Connection to `127.0.0.1' closed.

@@ -1,0 +1,105 @@
+
+Frequently Asked Questions
+--------------------------
+
+-> Why this horrible name?
+
+It's a play on words: WebDAV - DAV - caDAVer. Gettit?
+
+
+-> Why is this fork called cadaver-windows?
+
+Because that is what it is: cadaver, ported to build and run on
+Windows as a native program. The name says what you get rather than
+being clever about it. See README.md.
+
+
+-> Does it need MSYS2, Cygwin or WSL to run?
+
+No. A released binary is statically linked and depends only on DLLs
+that ship with Windows. MSYS2 is needed to *build* it, not to run it.
+
+If you build it yourself without STATIC=1 the result does need the
+OpenSSL, expat, readline and iconv DLLs from the toolchain that built
+it, which means ucrt64/bin has to be on PATH. Git Bash ships its own,
+older copies of some of those in /mingw64/bin; if those come first on
+PATH they will be found instead and the program will not start.
+
+
+-> `lcd C:\Users\me' does nothing, or the path comes out wrong.
+
+That works in this fork. If it does not, you are running upstream
+cadaver or an old build: the tokeniser used to read the backslash as
+an escape character and eat it.
+
+What still does not work is an MSYS or Git Bash path such as
+/c/Users/me. cadaver is a native Windows program and knows nothing
+about that translation. Convert it first:
+
+  cygpath -w /c/Users/me
+
+
+-> My uploaded file is corrupt / has grown by a few hundred bytes.
+
+Not with this fork. Upstream cadaver on Windows opened transfers in
+text mode, so every newline in an uploaded or downloaded file gained a
+carriage return in front of it. Everything here is binary throughout.
+
+If a file still comes back wrong, check whether it went through a
+proxy that rewrites content, and compare the sizes that `ls' and the
+local file report.
+
+
+-> How do I see what is actually being sent?
+
+  dav:/> set debug http
+
+which writes neon's protocol trace to standard error. Add `xml' to see
+the request and response bodies for PROPFIND, PROPPATCH and LOCK, or
+`httpbody' to see every body. `cleartext' also shows credentials, so
+do not paste that output anywhere.
+
+
+-> Why doesn't the "edit" command work with gvim / VS Code / Notepad++?
+
+Because they fork and return immediately by default, so cadaver sees
+the editor exit before you have typed anything and uploads the
+unchanged file. Tell the editor to wait:
+
+  set editor "gvim -f"
+  set editor "code --wait"
+  set editor "notepad++ -multiInst -nosession"
+
+Put the line in .cadaverrc to make it permanent. Plain notepad, the
+default on Windows, waits already.
+
+
+-> Can I use it in a script?
+
+Yes, with one caveat: cadaver exits 0 whether the commands worked or
+not, so you have to read the output. AGENTS.md explains how, and TODO
+records fixing the exit status as the first thing to do.
+
+  cadaver -r commands.txt https://dav.example.com/path/ < /dev/null
+
+
+-> The server works with other WebDAV clients but cadaver says
+   "Location does not advertise WebDAV class 1 support".
+
+The server did not put `DAV: 1' in its response to OPTIONS. Some
+otherwise working servers get this wrong. Use -t, or `set tolerant',
+to carry on anyway.
+
+
+-> Every LOCK fails with "Response missing activelock".
+
+The server answered LOCK with a Content-Type that is not an XML media
+type, so neon discarded the body and cadaver never saw the lock token.
+That is a server bug; wsgidav 4.x is a well-known example. Nothing can
+be done from the client side.
+
+
+-> Is there a recursive get or put?
+
+Not yet. It is in TODO. `mget *' and `mput *' work within one
+collection.

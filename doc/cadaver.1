@@ -1,0 +1,367 @@
+.TH cadaver 1 "August 2026" "cadaver-windows" "User Manuals"
+.SH NAME
+cadaver \- command\-line WebDAV client
+.SH SYNOPSIS
+.B cadaver
+[\fB\-t\fR] [\fB\-r\fR \fIfile\fR] [\fB\-p\fR \fIhost\fR[:\fIport\fR]] [\fB\-V\fR] [\fB\-h\fR] \fIURL\fR
+.SH DESCRIPTION
+.B cadaver
+supports file upload, download, on-screen display, in-place editing,
+namespace operations (move and copy), collection creation and deletion,
+property manipulation and resource locking.
+
+Its operation is similar to the standard BSD
+.BR ftp (1)
+client and the Samba Project's
+.BR smbclient (1).
+A user familiar with those tools should be quite comfortable with
+cadaver.
+
+.B cadaver
+connects to
+.IR URL ,
+which must be an absolute URI using the
+.B http:
+or
+.B https:
+scheme and must name a collection that already exists, and then reads
+commands until end of input or
+.BR quit .
+Credentials must not appear in the URL; see
+.B THE .netrc FILE
+below.
+
+This is the Windows port, from
+.UR https://github.com/Azathothas/cadaver-windows
+.UE .
+.SH OPTIONS
+.IP "\-t, \-\-tolerant"
+Allow
+.B cd
+and
+.B open
+into a collection that does not advertise WebDAV class 1 support; use
+this if the server or proxy has WebDAV compliance problems.
+.IP "\-r, \-\-rcfile=\fIfile\fR"
+Read commands from
+.I file
+rather than from the default rcfile.
+.B "cadaver \-\-help"
+prints the path of the default.
+.IP "\-p, \-\-proxy=\fIhost\fR[:\fIport\fR]"
+Connect through the proxy server
+.I host
+on the optional
+.IR port .
+.IP "\-V, \-\-version"
+Display version information and exit.
+.IP "\-h, \-\-help"
+Display the option list and the default rcfile path, and exit.
+.SH COMMAND REFERENCE
+.B help
+lists the commands and
+.B "help \fIcommand\fR"
+describes one.
+.SS Remote files
+.IP "ls [path]"
+List contents of the current, or another, collection.
+.IP "cd path"
+Change to the specified collection.
+.B "cd \-"
+returns to the previous one.
+.IP "pwd"
+Display the name of the current collection.
+.IP "put local [remote]"
+Upload a local file.
+.IP "get remote [local]"
+Download a remote resource. If the local file already exists, cadaver
+asks for another name.
+.IP "resumeget remote [local]"
+Resume a download into an existing local file, using a
+.B Range
+request from its current size.
+.IP "mget remote..."
+Download many remote resources.
+.IP "mput local..."
+Upload many local files.
+.IP "cat remote..."
+Write remote resources to standard output, unmodified.
+.IP "less remote..."
+Display remote resources through the pager.
+.IP "head remote"
+Show the status and headers of a
+.B HEAD
+request.
+.IP "edit resource"
+Lock the resource, download it to a temporary file, run the editor,
+upload the result with
+.BR If-Match ,
+and unlock it.
+.IP "mkcol remote..."
+Create remote collections.
+.IP "delete remote..."
+Delete non-collection resources.
+.IP "rmcol remote..."
+Delete remote collections and all their contents.
+.IP "copy source... dest"
+Copy resources from source to dest.
+.IP "move source... dest"
+Move resources from source to dest.
+.IP "rename source dest"
+Move source to dest with
+.BR "Overwrite: F" ,
+regardless of the
+.B overwrite
+option.
+.SS Locking
+.IP "lock resource"
+Lock the given resource.
+.IP "unlock resource"
+Unlock the given resource.
+.IP "discover resource"
+Display lock information for the resource.
+.IP "steal resource"
+Take over the lock tokens held on the resource.
+.IP "showlocks"
+Display the locks this session holds.
+.SS Properties
+.IP "propnames res"
+Names of the properties defined on the resource.
+.IP "propget res [propname]"
+Retrieve one property, or all of them.
+.IP "propset res propname value"
+Set a property on the resource.
+.IP "propdel res propname"
+Remove a property from the resource.
+.IP "chexec [+|\-] remote"
+Change the Apache
+.B executable
+property of the resource.
+.SS Searching and versioning
+.IP "search query"
+DASL search within the current collection. See the
+.B searchdepth
+and
+.B searchorder
+options.
+.IP "version res"
+Place the resource under version control.
+.IP "checkin res, checkout res, uncheckout res"
+DeltaV check-in, check-out and cancel.
+.IP "history res"
+Show the version history of the resource.
+.IP "label res [add|set|remove] name"
+Set, change or remove a label on the resource.
+.SS Local and session
+.IP "lcd [directory]"
+Change the local working directory.
+.IP "lls [\-l] [directory]"
+List the local directory, in the layout
+.B ls
+uses.
+.IP "lpwd"
+Print the local working directory.
+.IP "open URL"
+Open a connection to the given URL.
+.IP "close"
+Close the current connection.
+.IP "logout"
+Forget the credentials for the current authentication session.
+.IP "set [option] [value]"
+Set an option, or display all of them.
+.IP "unset option"
+Clear an option.
+.IP "describe option"
+Explain what an option does.
+.IP "echo word..."
+Print the arguments.
+.IP "about"
+Display version information.
+.IP "help [command]"
+Display the command list, or help for one command.
+.IP "quit"
+Exit.
+.SS Aliases
+.BR rm ", " mkdir ", " mv ", " cp " and " more
+are aliases for
+.BR delete ", " mkcol ", " move ", " copy " and " less ;
+.BR exit " and " bye
+are aliases for
+.BR quit .
+.SH WILDCARDS
+The commands that take file names expand
+.BR * ", " ? ", " [abc] ", " [a\-z] ", " [!abc]
+and POSIX character classes such as
+.BR [[:digit:]] ,
+locally for
+.B mput
+and against the server for the rest. A remote expansion costs one
+.B PROPFIND
+per collection it has to look inside, and can be interrupted with
+Ctrl\-C.
+
+Matching against the local file system is case-insensitive on Windows
+and case-sensitive elsewhere; matching against a server is always
+case-sensitive. A pattern that matches nothing is passed through
+unexpanded, as a shell does.
+.SH QUOTING
+A command line is split on whitespace.
+.B #
+starts a comment, and single or double quotes group an argument that
+contains spaces.
+
+On Windows a backslash is an ordinary character, because it is the path
+separator:
+.B "lcd C:\eUsers\eme"
+means what it looks like. Write a name containing a space or a
+.B #
+in quotes. Everywhere else a backslash quotes the character after it,
+as a shell does.
+.SH OPTIONS SET WITH set
+.B set
+with no argument lists the current values.
+.IP "tolerant"
+Tolerate collections that do not advertise WebDAV.
+.IP "overwrite"
+Whether
+.B copy
+and
+.B move
+overwrite the destination.
+.IP "expect100"
+Use the
+.B "Expect: 100\-continue"
+header on uploads.
+.IP "utf8"
+Treat local names as UTF\-8 rather than converting them.
+.IP "quiet"
+Whether to print connection progress.
+.IP "keepalive"
+Use persistent connections.
+.IP "editor, pager"
+Programs to run for
+.B edit
+and
+.BR less .
+.IP "namespace"
+The XML namespace used by
+.B propget
+and
+.BR propset .
+.IP "lockowner, lockscope, lockdepth, lockstore"
+Locking behaviour.
+.IP "client-cert, client-cert-uri"
+A PKCS#12 client certificate, or a URI naming one, for TLS.
+.IP "proxy, proxy-port, systemproxy"
+Proxy configuration.
+.IP "searchall, searchdepth, searchorder, searchdorder"
+DASL search behaviour.
+.IP "debug"
+Protocol tracing, written to standard error. The value is a
+comma-separated list of
+.BR http ", " httpbody ", " xml ", " xmlparse ", " socket ", " ssl ", "
+.BR httpauth ", " locks ", " files " and " cleartext .
+.B cleartext
+also shows credentials.
+.SH THE .netrc FILE
+The file
+.I .netrc
+in the home directory may be used to log in automatically to a server
+requiring authentication. The following tokens, separated by spaces,
+tabs or newlines, may be used:
+
+.B machine
+.I host
+.RS
+Identify a remote machine
+.I host
+which is compared with the hostname given on the command line or as an
+argument to the
+.B open
+command.
+Any subsequent tokens up to the end of file or the next
+.B machine
+or
+.B default
+token are associated with this entry.
+.RE
+
+.B default
+.RS
+Equivalent to the
+.B machine
+token but matching any hostname. Only one
+.B default
+token may be used and it must come after all
+.B machine
+tokens.
+.RE
+
+.B login
+.I username
+.RS
+The username to use when logging in to the remote machine.
+.RE
+
+.B password
+.I string
+.br
+.B passwd
+.I string
+.RS
+The password to use when logging in to the remote machine.
+.RE
+
+Any other tokens, as described in
+.BR ftp (1),
+are ignored. An entry must supply both a
+.B login
+and a
+.B password
+before cadaver will use either.
+.SH EXIT STATUS
+A session exits 0 whether the commands in it succeeded or not, so the
+transcript is the only indication. See the
+.B TODO
+file in the distribution.
+.SH EXAMPLES
+.IP "cadaver http://myserver.example.com/"
+Connect to myserver.example.com and open the root collection.
+.IP "cadaver http://zope.example.com:8022/Users/fred/"
+Connect to zope.example.com on port 8022 and open the collection
+.IR /Users/fred/ .
+.IP "cadaver https://secure.example.com/"
+Connect over TLS.
+.IP "cadaver \-t https://dav.example.com/share/"
+Connect to a server that does not advertise WebDAV class 1 support.
+.IP "cadaver \-r session.txt https://dav.example.com/uploads/ < /dev/null"
+Run the commands in
+.I session.txt
+and exit.
+.SH FILES
+.IP ".cadaverrc"
+Commands run at startup, in the home directory. On Windows that is
+.I %USERPROFILE%
+unless
+.B $HOME
+is set;
+.B "cadaver \-\-help"
+prints the path. Overridden by
+.BR \-\-rcfile .
+.IP ".netrc"
+Login information used by the auto-login process, in the same
+directory. See
+.B THE .netrc FILE
+above.
+.IP ".cadaver-locks"
+The lock store, in the same directory.
+.SH AUTHOR
+Joe Orton, and others; see
+.I THANKS
+in the distribution. This Windows port is at
+.UR https://github.com/Azathothas/cadaver-windows
+.UE .
+.SH SEE ALSO
+.BR ftp (1),
+.BR smbclient (1),
+.BR curl (1)

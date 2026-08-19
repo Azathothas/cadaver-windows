@@ -1,0 +1,26 @@
+version: 2
+
+updates:
+  # The workflow's actions.  Grouped so that a week's updates arrive as
+  # one pull request rather than one per action.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+    groups:
+      actions:
+        patterns:
+          - "*"
+
+  # The x/net/webdav server that tests/godav.sh runs the sessions
+  # against.  It is a test fixture rather than something this project
+  # ships, but x/net is security-relevant and there is no reason to sit
+  # on an old copy of it.
+  - package-ecosystem: gomod
+    directory: /tests/godav
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: tests

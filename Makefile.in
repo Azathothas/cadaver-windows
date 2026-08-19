@@ -1,0 +1,130 @@
+# cadaver @configure_input@
+SHELL = @SHELL@
+@SET_MAKE@
+
+PACKAGE = @PACKAGE_NAME@
+VERSION = @PACKAGE_VERSION@
+
+# Installation paths.
+prefix = @prefix@
+exec_prefix = @exec_prefix@
+bindir = @bindir@
+datarootdir = @datarootdir@
+mandir = @mandir@
+man1dir = $(mandir)/man1
+
+# Build paths.
+top_srcdir = @top_srcdir@
+top_builddir = .
+VPATH = @srcdir@
+
+# Toolchain settings.
+CC = @CC@
+AR = @AR@
+RANLIB = @RANLIB@
+EXEEXT = @EXEEXT@
+INCLUDES = -I$(top_srcdir)/src
+CPPFLAGS = @DEFS@ @CPPFLAGS@
+CFLAGS = @CFLAGS@ $(EXTRA_CFLAGS)
+ALL_CFLAGS = $(CPPFLAGS) $(INCLUDES) $(CFLAGS)
+LDFLAGS = @LDFLAGS@
+LIBS = @LIBS@ @NEON_LIBS@
+
+TARGET = cadaver$(EXEEXT)
+TARGET_DEPS = @TARGET_DEPS@
+OBJECTS = src/cadaver.o src/common.o src/commands.o src/ls.o \
+	src/cmdline.o src/options.o src/utils.o src/edit.o \
+	src/version.o src/search.o
+LIBOBJS = lib/basename.o lib/glob.o lib/rpmatch.o \
+	lib/yesno.o lib/getpass.o lib/mkstemp.o lib/system.o \
+	@LIBOBJS@
+ALLOBJS = $(OBJECTS) $(LIBOBJS)
+
+# Installation programs
+INSTALL_PROGRAM = @INSTALL_PROGRAM@
+INSTALL_DATA = @INSTALL_DATA@
+INSTALL = @INSTALL@
+
+# subdirs is order-only: it is phony, so listing it as an ordinary
+# prerequisite would make the executable out of date on every run and
+# relink it each time.  Order-only keeps the neon build first without
+# that, and makes -j safe here.  It needs GNU make, which both build
+# paths already use.
+all: $(TARGET)
+
+.PHONY: all subdirs install clean distclean check \
+	test-offline test-glob test-godav test-wsgidav
+
+$(TARGET): $(ALLOBJS) $(TARGET_DEPS) | subdirs
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(ALLOBJS) $(LIBS)
+
+.c.o:
+	$(CC) $(ALL_CFLAGS) -o $@ -c $<
+
+neon/src/libneon.a: subdirs
+
+subdirs:
+	@cd neon/src && $(MAKE) libneon.a
+
+clean:
+	rm -f $(OBJECTS) $(LIBOBJS) $(TARGET) *~
+	@cd neon/src && $(MAKE) clean
+
+distclean: clean
+	rm -f Makefile config.h config.log config.status
+	@cd neon/src && $(MAKE) distclean
+
+install: $(TARGET)
+	$(INSTALL) -d $(DESTDIR)$(bindir)
+	$(INSTALL) -d $(DESTDIR)$(man1dir)
+	$(INSTALL_PROGRAM) $(TARGET) $(DESTDIR)$(bindir)/$(TARGET)
+	$(INSTALL_DATA) $(top_srcdir)/doc/cadaver.1 $(DESTDIR)$(man1dir)/cadaver.1
+
+# The whole battery, cheapest first, so a broken build is found before
+# a server is started.  OPTS is passed through to the session tests, so
+# "make check OPTS=--regenerate" rewrites the expected transcripts after
+# a deliberate change; read the diff before committing it.
+check: test-offline test-glob test-godav test-wsgidav
+
+# No server, no network, under a second.
+test-offline: $(TARGET)
+	$(top_srcdir)/tests/offline.sh
+
+# Unit tests for lib/glob.c; needs a compiler and nothing else.
+test-glob:
+	$(top_srcdir)/tests/glob.sh
+
+# The scripted sessions against golang.org/x/net/webdav, which locks
+# correctly but has no dead property store.
+test-godav: $(TARGET)
+	$(top_srcdir)/tests/godav.sh $(OPTS)
+
+# The same sessions against wsgidav, which has dead properties but
+# whose LOCK response cadaver cannot use.  Neither server alone is the
+# whole picture; see TODO.
+test-wsgidav: $(TARGET)
+	$(top_srcdir)/tests/wsgidav.sh $(OPTS)
+
+Makefile: $(top_srcdir)/Makefile.in
+	./config.status Makefile
+
+# Deps
+src/cadaver.o: src/cadaver.c config.h src/common.h \
+	src/options.h src/cmdline.h src/commands.h src/cadaver.h
+src/options.o: src/options.c config.h src/options.h src/cadaver.h src/common.h
+src/cmdline.o: src/cmdline.c src/cmdline.h src/cadaver.h lib/basename.h \
+	lib/glob.h src/commands.h src/common.h
+src/commands.o: src/commands.c src/commands.h src/cadaver.h \
+	lib/basename.h src/options.h src/common.h
+src/edit.o: src/edit.c src/cadaver.h src/options.h src/common.h
+src/common.o: src/common.c src/common.h config.h
+src/ls.o: src/ls.c src/commands.h src/cadaver.h config.h
+src/search.o: src/search.c src/commands.h src/cadaver.h config.h
+src/utils.o: src/utils.c src/utils.h src/cadaver.h config.h
+src/version.o: src/version.c src/utils.h src/cadaver.h config.h
+lib/glob.o: lib/glob.c lib/glob.h config.h
+lib/netrc.o: lib/netrc.c lib/netrc.h config.h
+lib/getpass.o: lib/getpass.c lib/getpass.h config.h
+lib/mkstemp.o: lib/mkstemp.c src/common.h config.h
+lib/system.o: lib/system.c lib/system.h config.h
+lib/yesno.o: lib/yesno.c src/common.h config.h

@@ -1,0 +1,93 @@
+Options:
+        tolerant: off
+       overwrite: on
+       expect100: off
+            utf8: on
+           quiet: on
+       searchall: on
+       keepalive: on
+       lockowner: <LOCKOWNER>
+       lockstore: <LOCKSTORE>
+          editor: unset
+     client-cert: unset
+ client-cert-uri: unset
+       namespace: http://webdav.org/cadaver/custom-properties/
+           pager: unset
+           proxy: unset
+      proxy-port: unset
+     systemproxy: off
+     searchorder: unset
+    searchdorder: unset
+           debug: {}
+       lockscope: exclusive
+       lockdepth: infinite
+     searchdepth: infinity
+Option `lockscope': Lock scope options
+The lockscope value must be one of two valid keywords: exclusive or shared.
+Options:
+        tolerant: off
+       overwrite: on
+       expect100: off
+            utf8: on
+           quiet: on
+       searchall: on
+       keepalive: on
+       lockowner: <LOCKOWNER>
+       lockstore: <LOCKSTORE>
+          editor: unset
+     client-cert: unset
+ client-cert-uri: unset
+       namespace: http://webdav.org/cadaver/custom-properties/
+           pager: unset
+           proxy: unset
+      proxy-port: unset
+     systemproxy: off
+     searchorder: unset
+    searchdorder: unset
+           debug: {}
+       lockscope: shared
+       lockdepth: zero
+     searchdepth: infinity
+Options:
+        tolerant: off
+       overwrite: on
+       expect100: off
+            utf8: on
+           quiet: on
+       searchall: on
+       keepalive: on
+       lockowner: <LOCKOWNER>
+       lockstore: <LOCKSTORE>
+          editor: unset
+     client-cert: unset
+ client-cert-uri: unset
+       namespace: http://example.com/props/
+           pager: unset
+           proxy: unset
+      proxy-port: unset
+     systemproxy: off
+     searchorder: unset
+    searchdorder: unset
+           debug: {}
+       lockscope: exclusive
+       lockdepth: infinite
+     searchdepth: infinity
+Option `nosuchoption' not known.
+Unknown option: nosuchoption.
+Available commands: 
+ ls         cd         pwd        put        get        resumeget  mget       
+ mput       edit       head       less       mkcol      cat        delete     
+ rmcol      copy       move       rename     lock       unlock     discover   
+ steal      showlocks  version    checkin    checkout   uncheckout history    
+ label      propnames  chexec     propget    propdel    propset    search     
+ set        open       close      echo       quit       unset      lcd        
+ lls        lpwd       logout     help       describe   about      
+Aliases: rm=delete, mkdir=mkcol, mv=move, cp=copy, more=less, quit=exit=bye
+ `ls [path]'   List contents of current [or other] collection
+This command can only be used when connected to a server.
+Command name not known: nosuchcommand
+cadaver <VERSION>
+neon <VERSION>
+readline <VERSION>
+Current collection is `http://127.0.0.1:<PORT>/options/'.
+Connection to `127.0.0.1' closed.

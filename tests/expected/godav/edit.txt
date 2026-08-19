@@ -1,0 +1,13 @@
+Creating `edited': succeeded.
+Uploading hello.txt to `/edit/edited/hello.txt': [.. succeeded.
+Locking `/edit/edited/hello.txt': succeeded.
+Downloading `/edit/edited/hello.txt' to <TMP>/cadaver-edit-XXXXXX.txt [.. succeeded.
+edit: Running editor: `<EDITOR> "<TMP>/cadaver-edit-XXXXXX.txt"'...
+edit: Changes were made.
+Uploading changes to `/edit/edited/hello.txt' [.. succeeded.
+Unlocking `/edit/edited/hello.txt': succeeded.
+hello from cadaver
+line two
+edited-by-the-test-suite
+Deleting collection `/edit/edited/': succeeded.
+Connection to `127.0.0.1' closed.

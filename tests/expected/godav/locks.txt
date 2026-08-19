@@ -1,0 +1,16 @@
+Creating `locked': succeeded.
+Uploading hello.txt to `/locks/locked/hello.txt': [.. succeeded.
+No owned locks.
+Locking `hello.txt': succeeded.
+Lock token <TOKEN>:
+  Depth 0 on `http://127.0.0.1:<PORT>/locks/locked/hello.txt'
+  Scope: exclusive  Type: write  Timeout: <N> seconds
+  Owner: 
+Discovering locks on `hello.txt': no locks found.
+Unlocking `hello.txt': succeeded.
+No owned locks.
+Locking `hello.txt': succeeded.
+Stealing locks on `hello.txt': no locks found.
+Unlocking `hello.txt': succeeded.
+Deleting collection `/locks/locked/': succeeded.
+Connection to `127.0.0.1' closed.

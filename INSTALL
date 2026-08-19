@@ -1,0 +1,77 @@
+Installing cadaver
+==================
+
+README.md has the full instructions, including how to install the
+toolchain. This is the short form.
+
+There is no `configure' script in a fresh clone: it is generated.
+Nothing has to be fetched separately, though -- neon is checked into the
+tree rather than being a submodule.
+
+
+Windows, with autotools
+-----------------------
+
+In an MSYS2 UCRT64 shell:
+
+    ./autogen.sh
+    ./configure --with-ssl=openssl
+    make
+
+That leaves cadaver.exe at the top of the tree. `make install' puts it
+and the manual page under $prefix, which defaults to /ucrt64; use
+`./configure --prefix=...' to choose another.
+
+
+Windows, without autotools
+--------------------------
+
+The answers configure works out are checked in at win32/config.h, so
+the build needs only GNU make and a MinGW-w64 compiler:
+
+    make -f Makefile.w32
+
+and, for an executable that runs on a machine with no MSYS2 installed:
+
+    make -f Makefile.w32 STATIC=1
+
+
+What has to be installed first
+------------------------------
+
+A MinGW-w64 compiler, and OpenSSL, expat, readline and iconv for it.
+On MSYS2:
+
+    pacman -S --needed autoconf automake libtool m4 make pkgconf \
+        mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-openssl \
+        mingw-w64-ucrt-x86_64-expat mingw-w64-ucrt-x86_64-readline \
+        mingw-w64-ucrt-x86_64-libiconv mingw-w64-ucrt-x86_64-pkgconf
+
+The autotools packages are only needed for the first build path.
+
+
+Configure options
+-----------------
+
+    --with-ssl=openssl     use OpenSSL for TLS (the only choice tested
+                           here; --with-ssl=gnutls also exists)
+    --enable-warnings      build with the warning set CI gates on
+    --disable-readline     build without line editing, history and
+                           tab completion
+    --without-iconv        build without character-set conversion, which
+                           then requires a UTF-8 terminal
+    --disable-netrc        build without .netrc support
+    --disable-debugging    build without the `set debug' tracing
+
+`./configure --help' lists the rest, including the standard directory
+options.
+
+
+Checking the build
+------------------
+
+    make check
+
+runs the whole battery: the checks that need no server, the unit tests
+for the globbing, and the scripted sessions against two local WebDAV
+servers. README.md explains what each needs.

@@ -1,0 +1,2 @@
+# The body that came back must be the body that went up.
+cmp "$WORK/hello.txt" "$WORK/fetched.txt"

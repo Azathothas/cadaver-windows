@@ -1,0 +1,9 @@
+# A byte stream that is not text, to catch line-ending translation.
+lcd @WORK@
+mkcol bin
+cd bin
+put every-byte.dat
+ls
+get every-byte.dat back.dat
+resumeget every-byte.dat partial.dat
+quit

@@ -1,0 +1,13 @@
+# The edit command: lock, download to a temporary file, run an editor,
+# upload the result, unlock.  @EDITOR@ is a script that appends one
+# line, so the change is deterministic.
+lcd @WORK@
+mkcol edited
+cd edited
+put hello.txt
+set editor @EDITOR@
+edit hello.txt
+cat hello.txt
+cd ..
+rmcol edited
+quit
