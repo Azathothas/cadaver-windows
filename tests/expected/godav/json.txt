@@ -325,6 +325,16 @@
       "target": "/json/js/hello.txt",
       "status": "ok",
       "duration": "<DURATION>",
+      "locks": [
+        {
+          "token": "<TOKEN>",
+          "href": "http://127.0.0.1:<PORT>/json/js/hello.txt",
+          "scope": "exclusive",
+          "depth": 0,
+          "timeout": 0,
+          "owner": ""
+        }
+      ],
       "output": [
         "Locking `hello.txt': succeeded."
       ]

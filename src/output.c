@@ -746,9 +746,13 @@ void res_lock(const struct ne_lock *lock)
         ne_buffer_zappend(b, num);
     }
     ne_buffer_czappend(b, ",\"timeout\":");
-    /* Negative means NE_TIMEOUT_INFINITE or NE_TIMEOUT_INVALID; zero is
-     * a duration the server actually named. */
-    if (lock->timeout < 0) {
+    /* An infinite lock is named the way an infinite depth is; anything
+     * else negative is NE_TIMEOUT_INVALID, meaning the server said
+     * nothing usable.  Zero is a duration a server actually named. */
+    if (lock->timeout == NE_TIMEOUT_INFINITE) {
+        ne_buffer_czappend(b, "\"infinity\"");
+    }
+    else if (lock->timeout < 0) {
         ne_buffer_czappend(b, "null");
     }
     else {

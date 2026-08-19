@@ -562,6 +562,9 @@ static void execute_lock(const char *path)
 
     if (out_handle(ne_lock(session.sess, lock))) {
 	/* success: remember the lock. */
+        /* And report it: the token is what a script needs from this
+         * command, and `showlocks' was the only way to get it. */
+        res_lock(lock);
 	ne_lockstore_add(session.locks, lock);
     }
     else {

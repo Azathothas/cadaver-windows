@@ -220,7 +220,7 @@ and, for the commands that produce data rather than only an outcome:
 | `properties` | `propget`, `propnames` | `namespace`, `name`, and `value` — `null` for `propnames`, which asks for the names alone. |
 | `headers` | `head` | The response headers, as an object. |
 | `http_status` | `head` | The response status, as an integer. |
-| `locks` | `lock`, `discover`, `steal`, `showlocks` | `token`, `href`, `scope`, `depth` (`0`, `1` or `"infinity"`), `timeout` in seconds or `null`, and `owner`. |
+| `locks` | `lock`, `discover`, `steal`, `showlocks` | `token`, `href`, `scope`, `depth` (`0`, `1` or `"infinity"`), `timeout` in seconds, `"infinity"`, or `null` where the server named none, and `owner`. |
 | `path` | `pwd`, `lpwd` | The path the command was asked to report. |
 | `options` | `set` with no argument | Every option and its value, as an object. |
 
