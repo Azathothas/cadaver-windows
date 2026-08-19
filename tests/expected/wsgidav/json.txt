@@ -145,7 +145,7 @@ Enter locktoken:
         "date": "<DATE>",
         "etag": "<ETAG>",
         "last-modified": "<DATE>",
-        "server": "WsgiDAV/4.3.5 Cheroot/11.1.2 Python/3.13.14"
+        "server": "<SERVER>"
       },
       "http_status": 200,
       "output": [
@@ -157,7 +157,7 @@ Enter locktoken:
         "• date: <DATE>",
         "• etag: <ETAG>",
         "• last-modified: <DATE>",
-        "• server: WsgiDAV/4.3.5 Cheroot/11.1.2 Python/3.13.14"
+        "• server: <SERVER>"
       ]
     },
     {

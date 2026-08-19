@@ -52,6 +52,9 @@ SUBSTITUTIONS = [
     (re.compile(r"^(\s*• etag: ).*$", re.M), r"\1<ETAG>"),
     (re.compile(r"^(\s*• last-modified: ).*$", re.M), r"\1<DATE>"),
     (re.compile(r"^(\s*• date: ).*$", re.M), r"\1<DATE>"),
+    # The server names itself, and wsgidav names the Python running it,
+    # neither of which is cadaver's behaviour.
+    (re.compile(r"^(\s*• server: ).*$", re.M), r"\1<SERVER>"),
     # The temporary file `edit' creates: the middle six characters are
     # random by design, and the directory it lands in is wherever this
     # machine keeps its temporary files.
@@ -124,7 +127,8 @@ JSON_VOLATILE = {
 }
 
 # Response headers whose value is the server's, not cadaver's.
-JSON_HEADERS = {"etag": "<ETAG>", "last-modified": "<DATE>", "date": "<DATE>"}
+JSON_HEADERS = {"etag": "<ETAG>", "last-modified": "<DATE>",
+                "date": "<DATE>", "server": "<SERVER>"}
 
 
 def normalise_json(obj, text):
