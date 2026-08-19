@@ -1,0 +1,425 @@
+Enter locktoken: 
+{
+  "tool": "cadaver",
+  "version": "<VERSION>",
+  "target": "http://127.0.0.1:<PORT>/json/",
+  "started": "<DATE>",
+  "duration": "<DURATION>",
+  "commands": [
+    {
+      "command": "open",
+      "args": [
+        "http://127.0.0.1:8908/json/"
+      ],
+      "target": null,
+      "status": "ok",
+      "duration": "<DURATION>",
+      "output": [
+        ""
+      ]
+    },
+    {
+      "command": "lcd",
+      "args": [
+        "C:\\Users\\AjamX\\Downloads\\TEMP\\cadaver\\session-results\\wsgidav\\json"
+      ],
+      "target": null,
+      "status": "ok",
+      "duration": "<DURATION>",
+      "output": [
+        ""
+      ]
+    },
+    {
+      "command": "mkcol",
+      "args": [
+        "js"
+      ],
+      "target": "/json/js/",
+      "status": "ok",
+      "duration": "<DURATION>",
+      "output": [
+        "Creating `js': succeeded."
+      ]
+    },
+    {
+      "command": "cd",
+      "args": [
+        "js"
+      ],
+      "target": "/json/js/",
+      "status": "ok",
+      "duration": "<DURATION>",
+      "output": [
+        ""
+      ]
+    },
+    {
+      "command": "pwd",
+      "args": [],
+      "target": null,
+      "status": "ok",
+      "duration": "<DURATION>",
+      "path": "http://127.0.0.1:<PORT>/json/js/",
+      "output": [
+        "Current collection is `http://127.0.0.1:<PORT>/json/js/'."
+      ]
+    },
+    {
+      "command": "lpwd",
+      "args": [],
+      "target": null,
+      "status": "ok",
+      "duration": "<DURATION>",
+      "path": "<WORK>",
+      "output": [
+        "Local directory: <WORK>"
+      ]
+    },
+    {
+      "command": "put",
+      "args": [
+        "hello.txt"
+      ],
+      "target": "/json/js/hello.txt",
+      "status": "ok",
+      "duration": "<DURATION>",
+      "output": [
+        "Uploading hello.txt to `/json/js/hello.txt': succeeded."
+      ]
+    },
+    {
+      "command": "put",
+      "args": [
+        "second.txt"
+      ],
+      "target": "/json/js/second.txt",
+      "status": "ok",
+      "duration": "<DURATION>",
+      "output": [
+        "Uploading second.txt to `/json/js/second.txt': succeeded."
+      ]
+    },
+    {
+      "command": "ls",
+      "args": [],
+      "target": "/json/js/",
+      "status": "ok",
+      "duration": "<DURATION>",
+      "listing": [
+        {
+          "name": "hello.txt",
+          "href": "/json/js/hello.txt",
+          "type": "resource",
+          "size": 28,
+          "modified": "<DATE>",
+          "executable": false
+        },
+        {
+          "name": "second.txt",
+          "href": "/json/js/second.txt",
+          "type": "resource",
+          "size": 16,
+          "modified": "<DATE>",
+          "executable": false
+        }
+      ],
+      "output": [
+        "Listing collection `/json/js/': succeeded.",
+        "        hello.txt                             28  <DATE>",
+        "        second.txt                            16  <DATE>"
+      ]
+    },
+    {
+      "command": "head",
+      "args": [
+        "hello.txt"
+      ],
+      "target": "/json/js/hello.txt",
+      "status": "ok",
+      "duration": "<DURATION>",
+      "headers": {
+        "accept-ranges": "bytes",
+        "content-length": "28",
+        "content-type": "text/plain; charset=utf-8",
+        "date": "<DATE>",
+        "etag": "<ETAG>",
+        "last-modified": "<DATE>",
+        "server": "WsgiDAV/4.3.5 Cheroot/11.1.2 Python/3.13.14"
+      },
+      "http_status": 200,
+      "output": [
+        "Fetching headers for `hello.txt': succeeded.",
+        "Response status-code 200, headers:",
+        "• accept-ranges: bytes",
+        "• content-length: 28",
+        "• content-type: text/plain; charset=utf-8",
+        "• date: <DATE>",
+        "• etag: <ETAG>",
+        "• last-modified: <DATE>",
+        "• server: WsgiDAV/4.3.5 Cheroot/11.1.2 Python/3.13.14"
+      ]
+    },
+    {
+      "command": "propget",
+      "args": [
+        "hello.txt"
+      ],
+      "target": "/json/js/hello.txt",
+      "status": "ok",
+      "duration": "<DURATION>",
+      "properties": [
+        {
+          "namespace": "DAV:",
+          "name": "creationdate",
+          "value": "<DATE>"
+        },
+        {
+          "namespace": "DAV:",
+          "name": "displayname",
+          "value": "hello.txt"
+        },
+        {
+          "namespace": "DAV:",
+          "name": "getcontentlength",
+          "value": "28"
+        },
+        {
+          "namespace": "DAV:",
+          "name": "getcontenttype",
+          "value": "text/plain; charset=utf-8"
+        },
+        {
+          "namespace": "DAV:",
+          "name": "getetag",
+          "value": "<ETAG>"
+        },
+        {
+          "namespace": "DAV:",
+          "name": "getlastmodified",
+          "value": "<DATE>"
+        },
+        {
+          "namespace": "DAV:",
+          "name": "lockdiscovery",
+          "value": ""
+        },
+        {
+          "namespace": "DAV:",
+          "name": "resourcetype",
+          "value": ""
+        },
+        {
+          "namespace": "DAV:",
+          "name": "supportedlock",
+          "value": "<DAV:lockentry><DAV:lockscope><DAV:exclusive></DAV:exclusive></DAV:lockscope><DAV:locktype><DAV:write></DAV:write></DAV:locktype></DAV:lockentry><DAV:lockentry><DAV:lockscope><DAV:shared></DAV:shared></DAV:lockscope><DAV:locktype><DAV:write></DAV:write></DAV:locktype></DAV:lockentry>"
+        }
+      ],
+      "output": [
+        "Fetching properties for `hello.txt':",
+        "• DAV:creationdate = <DATE>",
+        "• DAV:displayname = hello.txt",
+        "• DAV:getcontentlength = 28",
+        "• DAV:getcontenttype = text/plain; charset=utf-8",
+        "• DAV:getetag = <ETAG>",
+        "• DAV:getlastmodified = <DATE>",
+        "• DAV:lockdiscovery = ",
+        "• DAV:resourcetype = ",
+        "• DAV:supportedlock = <DAV:lockentry><DAV:lockscope><DAV:exclusive></DAV:exclusive></DAV:lockscope><DAV:locktype><DAV:write></DAV:write></DAV:locktype></DAV:lockentry><DAV:lockentry><DAV:lockscope><DAV:shared></DAV:shared></DAV:lockscope><DAV:locktype><DAV:write></DAV:write></DAV:locktype></DAV:lockentry>"
+      ]
+    },
+    {
+      "command": "delete",
+      "args": [
+        "nosuchresource"
+      ],
+      "target": "/json/js/nosuchresource",
+      "status": "failed",
+      "duration": "<DURATION>",
+      "context": "404 Not Found",
+      "error": {
+        "op": "DELETE",
+        "path": "/json/js/nosuchresource",
+        "status": 404
+      },
+      "output": [
+        "Deleting `/json/js/nosuchresource': failed:",
+        "404 Not Found"
+      ]
+    },
+    {
+      "command": "rmcol",
+      "args": [
+        "hello.txt"
+      ],
+      "target": null,
+      "status": "failed",
+      "duration": "<DURATION>",
+      "context": "it is not a collection.\nThe `rmcol' command can only be used to delete collections.\nUse `rm hello.txt' to delete this resource.",
+      "output": [
+        "Deleting collection `/json/js/hello.txt': failed:",
+        "it is not a collection.",
+        "The `rmcol' command can only be used to delete collections.",
+        "Use `rm hello.txt' to delete this resource."
+      ]
+    },
+    {
+      "command": "mput",
+      "args": [
+        "hello.txt",
+        "second.txt"
+      ],
+      "target": "/json/js/second.txt",
+      "status": "ok",
+      "duration": "<DURATION>",
+      "operations": [
+        {
+          "target": "/json/js/hello.txt",
+          "status": "ok",
+          "duration": "<DURATION>"
+        },
+        {
+          "target": "/json/js/second.txt",
+          "status": "ok",
+          "duration": "<DURATION>"
+        }
+      ],
+      "output": [
+        "Uploading hello.txt to `/json/js/hello.txt': succeeded.",
+        "Uploading second.txt to `/json/js/second.txt': succeeded."
+      ]
+    },
+    {
+      "command": "cat",
+      "args": [
+        "hello.txt"
+      ],
+      "target": null,
+      "status": "failed",
+      "duration": "<DURATION>",
+      "context": "`cat' writes the resource to standard output, which with --json carries the result document. Use `get'.",
+      "output": [
+        "Fetching `hello.txt': failed:",
+        "`cat' writes the resource to standard output, which with --json carries the result document. Use `get'."
+      ]
+    },
+    {
+      "command": "less",
+      "args": [
+        "hello.txt"
+      ],
+      "target": null,
+      "status": "failed",
+      "duration": "<DURATION>",
+      "context": "`less' runs a pager, which writes to standard output; with --json that carries the result document. Use `get'.",
+      "output": [
+        "Displaying `hello.txt': failed:",
+        "`less' runs a pager, which writes to standard output; with --json that carries the result document. Use `get'."
+      ]
+    },
+    {
+      "command": "edit",
+      "args": [
+        "hello.txt"
+      ],
+      "target": null,
+      "status": "failed",
+      "duration": "<DURATION>",
+      "context": "`edit' runs an editor, which writes to standard output; with --json that carries the result document. Use `get' and `put'.",
+      "output": [
+        "Editing `hello.txt': failed:",
+        "`edit' runs an editor, which writes to standard output; with --json that carries the result document. Use `get' and `put'."
+      ]
+    },
+    {
+      "command": "lock",
+      "args": [
+        "hello.txt"
+      ],
+      "target": "/json/js/hello.txt",
+      "status": "failed",
+      "duration": "<DURATION>",
+      "context": "Response missing activelock for (null)",
+      "error": {
+        "op": "LOCK",
+        "path": "/json/js/hello.txt",
+        "status": 200
+      },
+      "output": [
+        "Locking `hello.txt': failed:",
+        "Response missing activelock for (null)"
+      ]
+    },
+    {
+      "command": "showlocks",
+      "args": [],
+      "target": null,
+      "status": "ok",
+      "duration": "<DURATION>",
+      "output": [
+        "No owned locks."
+      ]
+    },
+    {
+      "command": "unlock",
+      "args": [
+        "hello.txt"
+      ],
+      "target": null,
+      "status": "failed",
+      "duration": "<DURATION>",
+      "context": "no lock is held on it, and no lock token was given.",
+      "output": [
+        "Unlocking `hello.txt': failed:",
+        "no lock is held on it, and no lock token was given."
+      ]
+    },
+    {
+      "command": "cd",
+      "args": [
+        ".."
+      ],
+      "target": "/json/",
+      "status": "ok",
+      "duration": "<DURATION>",
+      "output": [
+        ""
+      ]
+    },
+    {
+      "command": "rmcol",
+      "args": [
+        "js"
+      ],
+      "target": "/json/js/",
+      "status": "failed",
+      "duration": "<DURATION>",
+      "context": "/json/js/hello.txt: 423 Locked",
+      "error": {
+        "op": "DELETE",
+        "path": "/json/js/",
+        "status": 207
+      },
+      "output": [
+        "Deleting collection `/json/js/': failed:",
+        "/json/js/hello.txt: 423 Locked"
+      ]
+    },
+    {
+      "command": "quit",
+      "args": [],
+      "target": null,
+      "status": "ok",
+      "duration": "<DURATION>",
+      "output": [
+        ""
+      ]
+    }
+  ],
+  "summary": {
+    "total": 23,
+    "ok": 15,
+    "failed": 8
+  }
+}
+-- cadaver exited 8 --

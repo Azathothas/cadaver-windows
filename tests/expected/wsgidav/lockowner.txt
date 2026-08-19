@@ -1,0 +1,36 @@
+Creating `owner': succeeded.
+Uploading hello.txt to `/lockowner/owner/hello.txt': [.. succeeded.
+Options:
+        tolerant: off
+       overwrite: on
+       expect100: off
+            utf8: on
+           quiet: on
+       searchall: on
+       keepalive: on
+       lockowner: foo&bar<baz>"quux"
+       lockstore: <LOCKSTORE>
+          editor: unset
+     client-cert: unset
+ client-cert-uri: unset
+       namespace: http://webdav.org/cadaver/custom-properties/
+           pager: unset
+           proxy: unset
+      proxy-port: unset
+     systemproxy: off
+     searchorder: unset
+    searchdorder: unset
+           debug: {httpbody}
+         clobber: ask
+       lockscope: exclusive
+       lockdepth: infinite
+     searchdepth: infinity
+Locking `hello.txt': failed:
+Response missing activelock for (null)
+No owned locks.
+Unlocking `hello.txt':Enter locktoken:  failed:
+no lock is held on it, and no lock token was given.
+Deleting collection `/lockowner/owner/': failed:
+/lockowner/owner/hello.txt: 423 Locked
+Connection to `127.0.0.1' closed.
+-- cadaver exited 3 --

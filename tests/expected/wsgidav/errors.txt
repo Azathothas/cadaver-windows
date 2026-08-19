@@ -8,14 +8,17 @@ Deleting `/errors/nosuchresource': failed:
 Fetching properties for `nosuchresource': failed:
 404 Not Found
 Creating `errs': succeeded.
-Deleting collection `/errors/errs/nothing': is not a collection.
+Deleting collection `/errors/errs/nothing': failed:
+it is not a collection.
 The `rmcol' command can only be used to delete collections.
 Use `rm errs/nothing' to delete this resource.
 Uploading hello.txt to `/errors/errs/hello.txt': [.. succeeded.
-Deleting collection `/errors/errs/hello.txt': is not a collection.
+Deleting collection `/errors/errs/hello.txt': failed:
+it is not a collection.
 The `rmcol' command can only be used to delete collections.
 Use `rm hello.txt' to delete this resource.
-Deleting `/errors/errs/': is a collection resource.
+Deleting `/errors/errs/': failed:
+it is a collection resource.
 The `rm' command cannot be used to delete a collection.
 Use `rmcol errs' to delete this collection and ALL its contents.
 Deleting collection `/errors/errs/': succeeded.
@@ -25,3 +28,4 @@ The `put' command requires 1 argument:
 The `ls' command takes at most 1 argument:
   ls [path] : List contents of current [or other] collection
 Connection to `127.0.0.1' closed.
+-- cadaver exited 10 --

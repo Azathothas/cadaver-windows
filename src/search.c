@@ -442,23 +442,23 @@ static int display_results(search_ctx * sctx)
 	char exec_char = ' ';
 
 	if (i%RESULT_PER_PAGE ==1) {
-	    printf("Found %d results (%d-%d)\n\n", 
+	    out_printf("Found %d results (%d-%d)\n\n", 
 		   sctx->result_num, i, 
 		   sctx->result_num<i+9?sctx->result_num:i+9);
 	}
 
-	printf("[%d] %-40s%c %10d  %s <%.10s>\n", i, res->href, exec_char,
+	out_printf("[%d] %-40s%c %10d  %s <%.10s>\n", i, res->href, exec_char,
 	       size, format_time(modtime), 
 	       res->getcontenttype?res->getcontenttype:"");
 
 	for (dprop = res->root;
 	     get_bool_option(opt_searchall) && dprop; dprop = dprop->next)
-	    printf("\t-  %s:%s = %s\n",	/* better way to show ? */
+	    out_printf("\t-  %s:%s = %s\n",	/* better way to show ? */
 		   dprop->nspace, dprop->name, dprop->value);
 	
 	if (i%RESULT_PER_PAGE == 0) {
             int ch;
-	    puts("-- Enter to More, 'q' to QUIT --");
+	    out_puts_line("-- Enter to More, 'q' to QUIT --");
 	    ch = fgetc(stdin);
             if (ch == 'q' || ch == EOF) break;
 	}
@@ -663,8 +663,8 @@ void execute_search(int count, const char **args)
 	    ne_buffer_concat(query, *pnt, " ", NULL);
     }
 
-    printf(_("Using query: "));
-    printf("%s, ", query->data);
+    out_printf(_("Using query: "));
+    out_printf("%s, ", query->data);
 
     /* Run search and get data to sctx */
     ret = run_search(session.sess, session.uri.path, searchdepth, query, sctx);

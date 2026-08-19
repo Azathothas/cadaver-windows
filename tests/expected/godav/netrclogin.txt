@@ -1,0 +1,8 @@
+Authentication required for cadaver-test on server `127.0.0.1':
+Username: alice
+Uploading hello.txt to `/netrclogin/hello.txt': [.. succeeded.
+Listing collection `/netrclogin/': succeeded.
+        hello.txt                             28  <DATE>
+Deleting `/netrclogin/hello.txt': succeeded.
+Connection to `127.0.0.1' closed.
+-- cadaver exited 0 --

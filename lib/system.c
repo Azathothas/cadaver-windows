@@ -39,6 +39,7 @@
 
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <errno.h>
 
 #include <ne_alloc.h>
 #include <ne_string.h>
@@ -283,6 +284,37 @@ void cad_set_mode(int fd, int mode)
     if (mode != -1) _setmode(fd, mode);
 }
 
+int cad_truncate(int fd, ne_off_t length)
+{
+    /* _chsize() takes a long, which is 32 bits here; the _s form takes
+     * a 64-bit length and returns an errno value rather than setting
+     * it. */
+    int err = _chsize_s(fd, (__int64) length);
+
+    if (err != 0) {
+        errno = err;
+        return -1;
+    }
+
+    return 0;
+}
+
+int cad_rename_over(const char *from, const char *to)
+{
+    /* The narrow entry point, to match the rest of the local file
+     * layer: cadaver opens and stats local paths with the CRT's narrow
+     * calls, so a name this one accepted and those did not would be
+     * worse than one neither accepts. */
+    if (!MoveFileExA(from, to, MOVEFILE_REPLACE_EXISTING)) {
+        /* There is no general mapping from a Windows error to an errno
+         * value; these are the two a rename actually hits. */
+        errno = GetLastError() == ERROR_FILE_NOT_FOUND ? ENOENT : EACCES;
+        return -1;
+    }
+
+    return 0;
+}
+
 int cad_file_info(const char *path, struct cad_finfo *info)
 {
     struct _stati64 st;
@@ -385,6 +417,17 @@ void cad_set_mode(int fd, int mode)
 {
     (void) fd;
     (void) mode;
+}
+
+int cad_truncate(int fd, ne_off_t length)
+{
+    return ftruncate(fd, (off_t) length);
+}
+
+int cad_rename_over(const char *from, const char *to)
+{
+    /* rename(2) replaces the destination, which is what is wanted. */
+    return rename(from, to);
 }
 
 int cad_file_info(const char *path, struct cad_finfo *info)

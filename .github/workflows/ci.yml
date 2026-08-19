@@ -36,6 +36,9 @@ jobs:
           fi
           shellcheck --version
           shellcheck --severity=warning autogen.sh tests/*.sh win32/*.sh
+          # The session checks are shell snippets that tests/session.sh
+          # sources, so they have no shebang of their own to go by.
+          shellcheck --severity=warning --shell=sh tests/sessions/*.check
 
       # A virtualenv rather than pip --user: recent Debian and Ubuntu
       # mark the system interpreter externally managed and refuse.
@@ -170,8 +173,16 @@ jobs:
       - name: Unit tests for the globbing
         run: ./tests/glob.sh
 
+      # What the .netrc parser gets wrong is invisible in use: a
+      # password it mangles produces an authentication failure that
+      # names neither the file nor the character.
+      - name: Unit tests for the .netrc parser
+        run: ./tests/netrc.sh
+
       # x/net/webdav locks correctly, which makes this the gate that
-      # covers the lock session at all.
+      # covers the lock session at all.  It is also the one with
+      # authentication in front of a subtree, so the two sessions that
+      # read a .netrc run only here.
       - name: Sessions against x/net/webdav
         run: ./tests/godav.sh
 

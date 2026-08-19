@@ -1,0 +1,8 @@
+Creating `traced': succeeded.
+Uploading hello.txt to `/trace/traced/hello.txt': [.. succeeded.
+Listing collection `/trace/traced/': succeeded.
+        hello.txt                             28  <DATE>
+Deleting `/trace/traced/hello.txt': succeeded.
+Deleting collection `/trace/traced/': succeeded.
+Connection to `127.0.0.1' closed.
+-- cadaver exited 0 --

@@ -1,0 +1,49 @@
+# Every request and response, tagged with the command that issued it.
+log="$WORK/wire.log"
+
+if [ ! -s "$log" ]; then
+    echo "the trace file $log is missing or empty"
+    exit 1
+fi
+
+fail=0
+for want in \
+    '--- 5 (put hello.txt) ---' \
+    '> PUT /trace/traced/hello.txt HTTP/1.1' \
+    '--- 6 (ls) ---' \
+    '> PROPFIND /trace/traced/ HTTP/1.1' \
+    '--- 7 (delete hello.txt) ---' \
+    '> DELETE /trace/traced/hello.txt HTTP/1.1'
+do
+    if ! grep -qF -- "$want" "$log"; then
+        echo "the trace does not contain: $want"
+        fail=1
+    fi
+done
+
+# Responses are there too, and are prefixed the other way round.
+if ! grep -q '^< HTTP/1\.1 ' "$log"; then
+    echo "the trace has no response status lines"
+    fail=1
+fi
+
+# The user agent names the tool, so a server log can be matched to it.
+if ! grep -q '^> User-Agent: cadaver/' "$log"; then
+    echo "the trace has no User-Agent header"
+    fail=1
+fi
+
+# A PROPFIND body is a protocol document and is traced.
+if ! grep -q 'Body block' "$log"; then
+    echo "the trace has no request bodies in it"
+    fail=1
+fi
+
+# The body of a transfer is the resource, which is not.  hello.txt is
+# the only thing put, so its content must not be in the trace.
+if grep -q 'hello from cadaver' "$log"; then
+    echo "the trace carries the body of a transfer"
+    fail=1
+fi
+
+exit $fail

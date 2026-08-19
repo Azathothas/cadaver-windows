@@ -1,0 +1,26 @@
+# The owner goes into the LOCK request body, so the escaping has to be
+# visible on the wire rather than only in what cadaver prints back.
+log="$WORK/wire.log"
+
+if [ ! -s "$log" ]; then
+    echo "the trace file $log is missing or empty"
+    exit 1
+fi
+
+fail=0
+
+# The body block neon writes for the LOCK request.
+if ! grep -qF '<owner><href>foo&amp;bar&lt;baz&gt;&quot;quux&quot;</href></owner>' "$log"; then
+    echo "the LOCK body does not carry the escaped owner:"
+    grep -n 'owner' "$log" || echo "  (no owner element in the trace at all)"
+    fail=1
+fi
+
+# And the characters must not be there unescaped, which is what made
+# the server answer 400 before.
+if grep -q '<href>foo&bar' "$log"; then
+    echo "the LOCK body carries the owner unescaped"
+    fail=1
+fi
+
+exit $fail

@@ -1,0 +1,15 @@
+# The exit status: this session fails three commands and no more, so
+# the "-- cadaver exited --" line at the end of the transcript is the
+# thing being checked.  Three because a count says how much went wrong,
+# not just that something did.
+lcd @WORK@
+mkcol exits
+cd exits
+put hello.txt
+delete nosuchresource
+propget nosuchresource
+nosuchcommand
+ls
+cd ..
+rmcol exits
+quit

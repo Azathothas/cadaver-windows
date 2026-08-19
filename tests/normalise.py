@@ -17,6 +17,7 @@ git from rewriting them.
 """
 
 import argparse
+import json
 import re
 import sys
 
@@ -35,7 +36,9 @@ SUBSTITUTIONS = [
     # Both come from the account cadaver runs as: the lock owner from
     # the user and machine names, the lock store from the home
     # directory.
-    (re.compile(r"^(\s*lockowner: ).*$", re.M), r"\1<LOCKOWNER>"),
+    # Only the default, which is built from them: an owner a session set
+    # for itself is a value the session is checking and stays as it is.
+    (re.compile(r"^(\s*lockowner: )mailto:.*$", re.M), r"\1<LOCKOWNER>"),
     (re.compile(r"^(\s*lockstore: ).*$", re.M), r"\1<LOCKSTORE>"),
     # Lock tokens are chosen by the server, and so is how long a lock
     # is granted for.  `steal' prints a token on its own rather than
@@ -110,12 +113,124 @@ def sort_runs(text):
     return "\n".join(out)
 
 
-def normalise(text, port=None, work=None):
+# Fields of the --json document that are a measurement, a clock reading
+# or an identifier the server chose: they differ between runs by design
+# and say nothing about whether cadaver is working.
+JSON_VOLATILE = {
+    "duration": "<DURATION>",
+    "started": "<DATE>",
+    "token": "<TOKEN>",
+    "version": "<VERSION>",
+}
+
+# Response headers whose value is the server's, not cadaver's.
+JSON_HEADERS = {"etag": "<ETAG>", "last-modified": "<DATE>", "date": "<DATE>"}
+
+
+def normalise_json(obj, text):
+    """Normalises a parsed --json document in place.
+
+    Working on the structure rather than on the text matters: a
+    substitution written for a transcript, applied to a JSON document,
+    would happily eat a closing quote and leave something that no longer
+    parses.  Every string value goes through `text' -- the same
+    normaliser the transcripts use -- and the parts whose order is the
+    server's choice are sorted.
+
+    RFC 4918 does not constrain the order of properties in a
+    multistatus, and x/net/webdav walks a Go map, so the same request
+    genuinely answers differently from one run to the next.
+    """
+    if isinstance(obj, dict):
+        # A property whose value is an etag the server chose.
+        if obj.get("name") == "getetag" and "value" in obj:
+            obj["value"] = "<ETAG>"
+
+        for key, value in list(obj.items()):
+            if key in JSON_VOLATILE and not isinstance(value, (dict, list)):
+                obj[key] = JSON_VOLATILE[key]
+            elif key == "headers" and isinstance(value, dict):
+                for name in value:
+                    if name.lower() in JSON_HEADERS:
+                        value[name] = JSON_HEADERS[name.lower()]
+                obj[key] = dict(sorted(value.items()))
+            elif key == "properties" and isinstance(value, list):
+                normalise_json(value, text)
+                obj[key] = sorted(
+                    value, key=lambda prop: (prop.get("namespace", ""),
+                                             prop.get("name", "")))
+            elif key == "output" and isinstance(value, list):
+                # The command's own output, which is the transcript it
+                # would have printed: normalised and sorted the same way.
+                obj[key] = sort_runs(text("\n".join(value))).split("\n")
+            elif isinstance(value, str):
+                obj[key] = text(value)
+            else:
+                normalise_json(value, text)
+    elif isinstance(obj, list):
+        for item in obj:
+            normalise_json(item, text)
+    return obj
+
+
+# How cadaver's --json document begins.  The harness merges standard
+# error into the transcript, so the document is not necessarily the only
+# thing there: a prompt goes to standard error under --json, and so does
+# a trace with no file named.
+JSON_MARKER = '{"tool":"cadaver"'
+
+
+def split_json(text):
+    """Splits `text' around cadaver's --json document.
+
+    Returns (everything else, the document), or (text, None) when there
+    is no document in it.
+    """
+    cut = text.rfind(JSON_MARKER)
+    if cut < 0:
+        return text, None
+
+    end = text.find("\n", cut)
+    if end < 0:
+        end = len(text)
+
+    return text[:cut] + text[end:], text[cut:end]
+
+
+def expand_json(document, text):
+    """Pretty-prints a --json document.
+
+    cadaver writes it as a single line, which diffs unreadably.  Parsing
+    and re-printing it makes a difference legible, and makes the test
+    fail outright on output that is not well-formed JSON -- the property
+    that matters most about it.
+    """
+    try:
+        obj = json.loads(document)
+    except ValueError as err:
+        return "%s\n<<< NOT VALID JSON: %s >>>\n" % (document, err)
+
+    # ensure_ascii=False so that a bullet stays a bullet: the expected
+    # files are UTF-8 and easier to read for it.
+    return json.dumps(normalise_json(obj, text), indent=2,
+                      ensure_ascii=False) + "\n"
+
+
+def spellings(path):
+    """The ways one Windows path can appear in cadaver's output.
+
+    As it was given, with forward slashes, and with every backslash
+    doubled -- the last because a path inside a JSON string is escaped.
+    Longest first, so that a path which is a prefix of another does not
+    shadow it.
+    """
+    return sorted({path, path.replace("\\", "/"),
+                   path.replace("\\", "\\\\")}, key=len, reverse=True)
+
+
+def normalise(text, port=None, work=None, sort=True):
     if work:
-        # Longest first, so that a path that is a prefix of another does
-        # not shadow it.
-        for path in sorted({work, work.replace("\\", "/")}, key=len,
-                           reverse=True):
+        for path in spellings(work):
             text = text.replace(path, "<WORK>")
 
     if port:
@@ -124,7 +239,7 @@ def normalise(text, port=None, work=None):
     for pattern, replacement in SUBSTITUTIONS:
         text = pattern.sub(replacement, text)
 
-    return sort_runs(text)
+    return sort_runs(text) if sort else text
 
 
 def main():
@@ -143,13 +258,33 @@ def main():
     text = text.replace("\r\n", "\n").replace("\r", "\n")
 
     if args.editor:
-        for path in sorted({args.editor, args.editor.replace("\\", "/")},
-                           key=len, reverse=True):
+        for path in spellings(args.editor):
             text = text.replace(path, "<EDITOR>")
 
-    text = normalise(text, port=args.port, work=args.work)
+    # The exit status line tests/session.sh appends is not part of what
+    # cadaver wrote, so it is held back while the JSON is expanded and
+    # put back afterwards.
+    status = ""
+    marker = "-- cadaver exited "
+    if marker in text:
+        cut = text.rindex(marker)
+        status = text[cut:]
+        text = text[:cut]
 
-    sys.stdout.buffer.write(text.encode("utf-8", "surrogateescape"))
+    def as_text(value):
+        return normalise(value, port=args.port, work=args.work, sort=False)
+
+    # A --json document is normalised through its structure, because a
+    # substitution written for a transcript would happily eat a closing
+    # quote; whatever else was on the streams is a transcript and is
+    # normalised as the text it is.
+    rest, document = split_json(text)
+    text = normalise(rest, port=args.port, work=args.work)
+    if document is not None:
+        text = text + expand_json(document, as_text)
+
+    sys.stdout.buffer.write((text + status).encode("utf-8",
+                                                   "surrogateescape"))
 
 
 if __name__ == "__main__":

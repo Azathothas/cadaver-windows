@@ -9,10 +9,15 @@ Lock token <TOKEN>:
   Depth 0 on `/locks/locked/hello.txt'
   Scope: exclusive  Type: write  Timeout: <N> seconds
   Owner: 
-Unlocking `hello.txt':Enter locktoken: No owned locks.
+Unlocking `hello.txt':Enter locktoken:  failed:
+no lock is held on it, and no lock token was given.
+No owned locks.
 Locking `hello.txt': failed:
 423 Locked
 Stealing locks on `hello.txt':
 /locks/locked/hello.txt: <TOKEN>
-Unlocking `hello.txt':Enter locktoken: Deleting collection `/locks/locked/': succeeded.
+Unlocking `hello.txt':Enter locktoken:  failed:
+no lock is held on it, and no lock token was given.
+Deleting collection `/locks/locked/': succeeded.
 Connection to `127.0.0.1' closed.
+-- cadaver exited 4 --

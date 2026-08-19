@@ -33,6 +33,8 @@
 /godav-results/
 /session-results/
 /globtest-work/
+/netrctest-work/
+/offline-work/
 
 # Local WebDAV server used by tests/wsgidav.sh.
 /dav-venv/

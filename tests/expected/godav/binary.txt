@@ -5,3 +5,4 @@ Listing collection `/binary/bin/': succeeded.
 Downloading `every-byte.dat' to `back.dat': [.. succeeded.
 Downloading `every-byte.dat' to `partial.dat': [.. succeeded.
 Connection to `127.0.0.1' closed.
+-- cadaver exited 0 --

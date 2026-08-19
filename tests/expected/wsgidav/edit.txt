@@ -7,3 +7,4 @@ line two
 Deleting collection `/edit/edited/': failed:
 /edit/edited/hello.txt: 423 Locked
 Connection to `127.0.0.1' closed.
+-- cadaver exited 2 --

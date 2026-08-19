@@ -1,0 +1,408 @@
+
+{
+  "tool": "cadaver",
+  "version": "<VERSION>",
+  "target": "http://127.0.0.1:<PORT>/json/",
+  "started": "<DATE>",
+  "duration": "<DURATION>",
+  "commands": [
+    {
+      "command": "open",
+      "args": [
+        "http://127.0.0.1:8907/json/"
+      ],
+      "target": null,
+      "status": "ok",
+      "duration": "<DURATION>",
+      "output": [
+        ""
+      ]
+    },
+    {
+      "command": "lcd",
+      "args": [
+        "C:\\Users\\AjamX\\Downloads\\TEMP\\cadaver\\session-results\\godav\\json"
+      ],
+      "target": null,
+      "status": "ok",
+      "duration": "<DURATION>",
+      "output": [
+        ""
+      ]
+    },
+    {
+      "command": "mkcol",
+      "args": [
+        "js"
+      ],
+      "target": "/json/js/",
+      "status": "ok",
+      "duration": "<DURATION>",
+      "output": [
+        "Creating `js': succeeded."
+      ]
+    },
+    {
+      "command": "cd",
+      "args": [
+        "js"
+      ],
+      "target": "/json/js/",
+      "status": "ok",
+      "duration": "<DURATION>",
+      "output": [
+        ""
+      ]
+    },
+    {
+      "command": "pwd",
+      "args": [],
+      "target": null,
+      "status": "ok",
+      "duration": "<DURATION>",
+      "path": "http://127.0.0.1:<PORT>/json/js/",
+      "output": [
+        "Current collection is `http://127.0.0.1:<PORT>/json/js/'."
+      ]
+    },
+    {
+      "command": "lpwd",
+      "args": [],
+      "target": null,
+      "status": "ok",
+      "duration": "<DURATION>",
+      "path": "<WORK>",
+      "output": [
+        "Local directory: <WORK>"
+      ]
+    },
+    {
+      "command": "put",
+      "args": [
+        "hello.txt"
+      ],
+      "target": "/json/js/hello.txt",
+      "status": "ok",
+      "duration": "<DURATION>",
+      "output": [
+        "Uploading hello.txt to `/json/js/hello.txt': succeeded."
+      ]
+    },
+    {
+      "command": "put",
+      "args": [
+        "second.txt"
+      ],
+      "target": "/json/js/second.txt",
+      "status": "ok",
+      "duration": "<DURATION>",
+      "output": [
+        "Uploading second.txt to `/json/js/second.txt': succeeded."
+      ]
+    },
+    {
+      "command": "ls",
+      "args": [],
+      "target": "/json/js/",
+      "status": "ok",
+      "duration": "<DURATION>",
+      "listing": [
+        {
+          "name": "hello.txt",
+          "href": "/json/js/hello.txt",
+          "type": "resource",
+          "size": 28,
+          "modified": "<DATE>",
+          "executable": false
+        },
+        {
+          "name": "second.txt",
+          "href": "/json/js/second.txt",
+          "type": "resource",
+          "size": 16,
+          "modified": "<DATE>",
+          "executable": false
+        }
+      ],
+      "output": [
+        "Listing collection `/json/js/': succeeded.",
+        "        hello.txt                             28  <DATE>",
+        "        second.txt                            16  <DATE>"
+      ]
+    },
+    {
+      "command": "head",
+      "args": [
+        "hello.txt"
+      ],
+      "target": "/json/js/hello.txt",
+      "status": "ok",
+      "duration": "<DURATION>",
+      "headers": {
+        "accept-ranges": "bytes",
+        "content-length": "28",
+        "content-type": "text/plain; charset=utf-8",
+        "date": "<DATE>",
+        "etag": "<ETAG>",
+        "last-modified": "<DATE>"
+      },
+      "http_status": 200,
+      "output": [
+        "Fetching headers for `hello.txt': succeeded.",
+        "Response status-code 200, headers:",
+        "• accept-ranges: bytes",
+        "• content-length: 28",
+        "• content-type: text/plain; charset=utf-8",
+        "• date: <DATE>",
+        "• etag: <ETAG>",
+        "• last-modified: <DATE>"
+      ]
+    },
+    {
+      "command": "propget",
+      "args": [
+        "hello.txt"
+      ],
+      "target": "/json/js/hello.txt",
+      "status": "ok",
+      "duration": "<DURATION>",
+      "properties": [
+        {
+          "namespace": "DAV:",
+          "name": "displayname",
+          "value": "hello.txt"
+        },
+        {
+          "namespace": "DAV:",
+          "name": "getcontentlength",
+          "value": "28"
+        },
+        {
+          "namespace": "DAV:",
+          "name": "getcontenttype",
+          "value": "text/plain; charset=utf-8"
+        },
+        {
+          "namespace": "DAV:",
+          "name": "getetag",
+          "value": "<ETAG>"
+        },
+        {
+          "namespace": "DAV:",
+          "name": "getlastmodified",
+          "value": "<DATE>"
+        },
+        {
+          "namespace": "DAV:",
+          "name": "resourcetype",
+          "value": ""
+        },
+        {
+          "namespace": "DAV:",
+          "name": "supportedlock",
+          "value": "<DAV:lockentry xmlns:D='DAV:'><DAV:lockscope><DAV:exclusive></DAV:exclusive></DAV:lockscope><DAV:locktype><DAV:write></DAV:write></DAV:locktype></DAV:lockentry>"
+        }
+      ],
+      "output": [
+        "Fetching properties for `hello.txt':",
+        "• DAV:displayname = hello.txt",
+        "• DAV:getcontentlength = 28",
+        "• DAV:getcontenttype = text/plain; charset=utf-8",
+        "• DAV:getetag = <ETAG>",
+        "• DAV:getlastmodified = <DATE>",
+        "• DAV:resourcetype = ",
+        "• DAV:supportedlock = <DAV:lockentry xmlns:D='DAV:'><DAV:lockscope><DAV:exclusive></DAV:exclusive></DAV:lockscope><DAV:locktype><DAV:write></DAV:write></DAV:locktype></DAV:lockentry>"
+      ]
+    },
+    {
+      "command": "delete",
+      "args": [
+        "nosuchresource"
+      ],
+      "target": "/json/js/nosuchresource",
+      "status": "failed",
+      "duration": "<DURATION>",
+      "context": "404 Not Found",
+      "error": {
+        "op": "DELETE",
+        "path": "/json/js/nosuchresource",
+        "status": 404
+      },
+      "output": [
+        "Deleting `/json/js/nosuchresource': failed:",
+        "404 Not Found"
+      ]
+    },
+    {
+      "command": "rmcol",
+      "args": [
+        "hello.txt"
+      ],
+      "target": null,
+      "status": "failed",
+      "duration": "<DURATION>",
+      "context": "it is not a collection.\nThe `rmcol' command can only be used to delete collections.\nUse `rm hello.txt' to delete this resource.",
+      "output": [
+        "Deleting collection `/json/js/hello.txt': failed:",
+        "it is not a collection.",
+        "The `rmcol' command can only be used to delete collections.",
+        "Use `rm hello.txt' to delete this resource."
+      ]
+    },
+    {
+      "command": "mput",
+      "args": [
+        "hello.txt",
+        "second.txt"
+      ],
+      "target": "/json/js/second.txt",
+      "status": "ok",
+      "duration": "<DURATION>",
+      "operations": [
+        {
+          "target": "/json/js/hello.txt",
+          "status": "ok",
+          "duration": "<DURATION>"
+        },
+        {
+          "target": "/json/js/second.txt",
+          "status": "ok",
+          "duration": "<DURATION>"
+        }
+      ],
+      "output": [
+        "Uploading hello.txt to `/json/js/hello.txt': succeeded.",
+        "Uploading second.txt to `/json/js/second.txt': succeeded."
+      ]
+    },
+    {
+      "command": "cat",
+      "args": [
+        "hello.txt"
+      ],
+      "target": null,
+      "status": "failed",
+      "duration": "<DURATION>",
+      "context": "`cat' writes the resource to standard output, which with --json carries the result document. Use `get'.",
+      "output": [
+        "Fetching `hello.txt': failed:",
+        "`cat' writes the resource to standard output, which with --json carries the result document. Use `get'."
+      ]
+    },
+    {
+      "command": "less",
+      "args": [
+        "hello.txt"
+      ],
+      "target": null,
+      "status": "failed",
+      "duration": "<DURATION>",
+      "context": "`less' runs a pager, which writes to standard output; with --json that carries the result document. Use `get'.",
+      "output": [
+        "Displaying `hello.txt': failed:",
+        "`less' runs a pager, which writes to standard output; with --json that carries the result document. Use `get'."
+      ]
+    },
+    {
+      "command": "edit",
+      "args": [
+        "hello.txt"
+      ],
+      "target": null,
+      "status": "failed",
+      "duration": "<DURATION>",
+      "context": "`edit' runs an editor, which writes to standard output; with --json that carries the result document. Use `get' and `put'.",
+      "output": [
+        "Editing `hello.txt': failed:",
+        "`edit' runs an editor, which writes to standard output; with --json that carries the result document. Use `get' and `put'."
+      ]
+    },
+    {
+      "command": "lock",
+      "args": [
+        "hello.txt"
+      ],
+      "target": "/json/js/hello.txt",
+      "status": "ok",
+      "duration": "<DURATION>",
+      "output": [
+        "Locking `hello.txt': succeeded."
+      ]
+    },
+    {
+      "command": "showlocks",
+      "args": [],
+      "target": null,
+      "status": "ok",
+      "duration": "<DURATION>",
+      "locks": [
+        {
+          "token": "<TOKEN>",
+          "href": "http://127.0.0.1:<PORT>/json/js/hello.txt",
+          "scope": "exclusive",
+          "depth": 0,
+          "timeout": 0,
+          "owner": ""
+        }
+      ],
+      "output": [
+        "Lock token <TOKEN>:",
+        "  Depth 0 on `http://127.0.0.1:<PORT>/json/js/hello.txt'",
+        "  Scope: exclusive  Type: write  Timeout: <N> seconds",
+        "  Owner: "
+      ]
+    },
+    {
+      "command": "unlock",
+      "args": [
+        "hello.txt"
+      ],
+      "target": "/json/js/hello.txt",
+      "status": "ok",
+      "duration": "<DURATION>",
+      "output": [
+        "Unlocking `hello.txt': succeeded."
+      ]
+    },
+    {
+      "command": "cd",
+      "args": [
+        ".."
+      ],
+      "target": "/json/",
+      "status": "ok",
+      "duration": "<DURATION>",
+      "output": [
+        ""
+      ]
+    },
+    {
+      "command": "rmcol",
+      "args": [
+        "js"
+      ],
+      "target": "/json/js/",
+      "status": "ok",
+      "duration": "<DURATION>",
+      "output": [
+        "Deleting collection `/json/js/': succeeded."
+      ]
+    },
+    {
+      "command": "quit",
+      "args": [],
+      "target": null,
+      "status": "ok",
+      "duration": "<DURATION>",
+      "output": [
+        ""
+      ]
+    }
+  ],
+  "summary": {
+    "total": 23,
+    "ok": 18,
+    "failed": 5
+  }
+}
+-- cadaver exited 5 --

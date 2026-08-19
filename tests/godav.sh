@@ -64,8 +64,22 @@ if command -v cygpath >/dev/null 2>&1; then
     ABSROOT=`cygpath -m "$ABSROOT"`
 fi
 
+# The netrc sessions need somewhere to authenticate against, so this
+# server puts HTTP Basic in front of one subtree.  The password holds an
+# apostrophe on purpose: mangling one is upstream issue #75, and a
+# session that authenticates with it proves the parser end to end.
+# tests/sessions/netrc.home has to agree with what is set here.
+# Without a leading slash: an MSYS2 or Git Bash shell rewrites an
+# argument that looks like an absolute path into a Windows one before
+# the server, which is a native program, ever sees it.
+AUTH_PREFIX=netrc
+AUTH_USER=alice
+AUTH_PASS="p@ss'word"
+
 echo "-- Launching x/net/webdav on port $PORT --"
-"$SERVER" -addr "127.0.0.1:$PORT" -dir "$ABSROOT" > "$OUT/server.log" 2>&1 &
+"$SERVER" -addr "127.0.0.1:$PORT" -dir "$ABSROOT" \
+    -authprefix "$AUTH_PREFIX" -authuser "$AUTH_USER" \
+    -authpass "$AUTH_PASS" > "$OUT/server.log" 2>&1 &
 SERVER_PID=$!
 
 cleanup() {

@@ -1,0 +1,15 @@
+# The lock owner goes into the LOCK request body, so a value with XML
+# markup characters in it has to be escaped or the body is not
+# well-formed and the server answers 400.  Upstream issue #64.
+lcd @WORK@
+mkcol owner
+cd owner
+put hello.txt
+set lockowner foo&bar<baz>"quux"
+set
+lock hello.txt
+showlocks
+unlock hello.txt
+cd ..
+rmcol owner
+quit

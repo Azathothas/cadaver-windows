@@ -6,11 +6,12 @@ Lock token <TOKEN>:
   Depth 0 on `http://127.0.0.1:<PORT>/locks/locked/hello.txt'
   Scope: exclusive  Type: write  Timeout: <N> seconds
   Owner: 
-Discovering locks on `hello.txt': no locks found.
+Discovering locks on `hello.txt': the server reported no locks.
 Unlocking `hello.txt': succeeded.
 No owned locks.
 Locking `hello.txt': succeeded.
-Stealing locks on `hello.txt': no locks found.
+Stealing locks on `hello.txt': the server reported no locks.
 Unlocking `hello.txt': succeeded.
 Deleting collection `/locks/locked/': succeeded.
 Connection to `127.0.0.1' closed.
+-- cadaver exited 0 --

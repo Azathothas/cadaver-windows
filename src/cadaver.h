@@ -73,7 +73,16 @@ struct command {
 	parmscope_option, /* option parameter */
 	parmscope_local, /* local filenames */
 	parmscope_remote /* remote filename */
-    } scope;
+    } scope; /* where a wildcard in an argument is expanded */
+    /* What each argument completes to, one letter per argument: `r'
+     * remote, `l' local, `o' an option name, `n' nothing.  The last
+     * letter covers every further argument, which is what a command
+     * taking a list of them needs.  Separate from `scope' above because
+     * a command can take one argument of each kind -- `get remote
+     * local' -- and because widening where a wildcard is expanded would
+     * change what those commands do rather than only what they
+     * offer. */
+    const char *completes;
     union {
 	void (*take0)(void);
 	void (*take1)(const char *);
@@ -181,6 +190,19 @@ enum output_type {
     o_download,
     o_finish
 };
+
+/* The --trace dump includes message bodies, which is what makes a
+ * PROPFIND or a LOCK diagnosable.  A transfer's body is the resource
+ * itself, which is not worth putting in a log file and may be very
+ * large, so it is left out for the length of the operation.  Called by
+ * the output layer, which knows where an operation begins and ends. */
+void trace_body_suppress(void);
+void trace_body_restore(void);
+
+/* Forgets that a command is in progress, for an operation that ended
+ * without printing anything.  Without it the next connection message
+ * would be written as though it interrupted one. */
+void out_state_reset(void);
 
 void output(enum output_type, const char *fmt, ...)
 #ifdef __GNUC__

@@ -39,22 +39,28 @@
 #include "common.h"
 #include "cadaver.h"
 #include "options.h"
+#include "output.h"
+#include "i18n.h"
 
 static void set_debug(const char *new);
 static void unset_debug(const char *new);
-static void disp_debug(void);
+static void disp_debug(char *buf, size_t len);
 
 static void set_lockscope(const char *new);
 static void unset_lockscope(const char *new);
-static void disp_lockscope(void);
+static void disp_lockscope(char *buf, size_t len);
 
 static void set_lockdepth(const char *new);
 static void unset_lockdepth(const char *new);
-static void disp_lockdepth(void);
+static void disp_lockdepth(char *buf, size_t len);
+
+static void set_clobber_option(const char *new);
+static void unset_clobber(const char *new);
+static void disp_clobber(char *buf, size_t len);
 
 static void set_searchdepth(const char *new);
 static void unset_searchdepth(const char *new);
-static void disp_searchdepth(void);
+static void disp_searchdepth(char *buf, size_t len);
 
 /* Option holders */
 
@@ -62,6 +68,7 @@ static int enable_expect, presume_utf8, overwrite, quiet, searchall, system_prox
 
 enum ne_lock_scope lockscope;
 int lockdepth;
+enum clobber_mode clobber;
 
 /* search option global */
 int searchdepth;
@@ -76,10 +83,12 @@ static struct option {
 	opt_string,
 	opt_handled
     } type;
-    /* for handled options */
+    /* for handled options.  display() fills a buffer rather than
+     * printing, so that `set' can record the value for --json as well
+     * as show it. */
     void (*set)(const char *);
     void (*unset)(const char *);
-    void (*display)(void);
+    void (*display)(char *buf, size_t len);
     /* for all options */
     const char *help;
     /* for handled options */
@@ -117,6 +126,14 @@ static struct option {
       set_debug, unset_debug, disp_debug, "Debugging options",
       "The debug value is a list of comma-separated keywords.\n"
       "Valid keywords are: socket, http, xml, httpauth, cleartext."
+    },
+    { "clobber", opt_clobber, NULL, opt_handled,
+      set_clobber_option, unset_clobber, disp_clobber,
+      "What `get' does when the local file exists",
+      "The clobber value must be ask, which prompts for another name and is\n"
+      "the default, yes to overwrite the file, or no to leave it and fail.\n"
+      "Asking cannot work in a script: with the input at end of file the\n"
+      "prompt reads nothing and the resource is not downloaded."
     },
     { "lockscope", opt_lockscope, NULL, opt_handled,
       set_lockscope, unset_lockscope, disp_lockscope, "Lock scope options",
@@ -156,26 +173,32 @@ static const struct {
 static void display_options(void) 
 {
     int n;
-    printf("Options:\n");
+    out_printf("Options:\n");
     for (n = 0; options[n].name != NULL; n++) {
 	int *val = (int *)options[n].holder;
 	switch (options[n].type) {
 	case opt_bool:
-	    printf(" %15s: %s\n", options[n].name, *val?"on":"off");
+	    out_printf(" %15s: %s\n", options[n].name, *val?"on":"off");
+            res_option(options[n].name, *val ? "on" : "off");
 	    break;
 	case opt_string:
 	    if (options[n].holder == NULL) {
-		printf(" %15s: unset\n", options[n].name);
+		out_printf(" %15s: unset\n", options[n].name);
+                res_option(options[n].name, NULL);
 	    } else {
-		printf(" %15s: %s\n", options[n].name, 
+		out_printf(" %15s: %s\n", options[n].name,
 		       (char *)options[n].holder);
+                res_option(options[n].name, (char *)options[n].holder);
 	    }
 	    break;
-	case opt_handled:
-	    printf(" %15s: ", options[n].name);
-	    (*options[n].display)();
-	    printf("\n");
+	case opt_handled: {
+            char buf[512];
+
+            (*options[n].display)(buf, sizeof buf);
+	    out_printf(" %15s: %s\n", options[n].name, buf);
+            res_option(options[n].name, buf);
 	    break;
+        }
 	}
     }
 }
@@ -207,7 +230,8 @@ static void do_debug(const char *set, int setit)
 	}
 
 	if (!got) {
-	    printf("Debug option %s unknown.\n", opt);
+	    out_printf("Debug option %s unknown.\n", opt);
+            cmd_failed(_("no such debug option"));
 	}
     } while (pnt != NULL);
     
@@ -224,16 +248,63 @@ static void unset_debug(const char *s)
     do_debug(s, 0);
 }
 
-static void disp_debug(void)
+static void disp_debug(char *buf, size_t len)
 {
-    int n, flag=0;
-    putchar('{');
+    int n, flag = 0;
+    size_t used = 1;
+
+    ne_strnzcpy(buf, "{", len);
     for (n = 0; debug_map[n].name != NULL; n++) {
 	if (ne_debug_mask & debug_map[n].val) {
-	    printf("%s%s", flag++?",":"", debug_map[n].name);
+            ne_snprintf(buf + used, len - used, "%s%s",
+                        flag++ ? "," : "", debug_map[n].name);
+            used = strlen(buf);
 	}
     }
-    putchar('}');
+    ne_snprintf(buf + used, len - used, "}");
+}
+
+int set_clobber(const char *what)
+{
+    if (what == NULL) {
+        clobber = clobber_ask;
+    }
+    else if (strcasecmp(what, "ask") == 0) {
+        clobber = clobber_ask;
+    }
+    else if (strcasecmp(what, "yes") == 0 || strcasecmp(what, "on") == 0) {
+        clobber = clobber_yes;
+    }
+    else if (strcasecmp(what, "no") == 0 || strcasecmp(what, "off") == 0) {
+        clobber = clobber_no;
+    }
+    else {
+        fprintf(stderr, _("cadaver: clobber must be ask, yes or no, "
+                          "not `%s'.\n"), what);
+        return 1;
+    }
+
+    return 0;
+}
+
+static void set_clobber_option(const char *set)
+{
+    if (set_clobber(set)) {
+        out_printf(_("Invalid value for clobber. Try `set clobber' for more "
+                     "info.\n"));
+        cmd_failed(_("invalid value"));
+    }
+}
+
+static void unset_clobber(const char *s)
+{
+    clobber = clobber_ask;
+}
+
+static void disp_clobber(char *buf, size_t len)
+{
+    ne_strnzcpy(buf, clobber == clobber_yes ? "yes" :
+                     clobber == clobber_no ? "no" : "ask", len);
 }
 
 static void set_lockscope(const char *set)
@@ -242,8 +313,10 @@ static void set_lockscope(const char *set)
 	lockscope = ne_lockscope_exclusive;
     else if (strcasecmp(set,"shared") == 0)
 	lockscope = ne_lockscope_shared;
-    else
-	printf("Invalid value for lockscope. Try `set lockscope' for more info.\n");
+    else {
+	out_printf("Invalid value for lockscope. Try `set lockscope' for more info.\n");
+        cmd_failed(_("invalid value"));
+    }
 }
 
 static void unset_lockscope(const char *s)
@@ -251,14 +324,11 @@ static void unset_lockscope(const char *s)
     lockscope = ne_lockscope_exclusive;
 }
 
-static void disp_lockscope(void)
+static void disp_lockscope(char *buf, size_t len)
 {
-    if (lockscope == ne_lockscope_exclusive)
-	printf("exclusive");
-    else if (lockscope == ne_lockscope_shared)
-	printf("shared");
-    else
-	printf("illegal value");
+    ne_strnzcpy(buf, lockscope == ne_lockscope_exclusive ? "exclusive" :
+                     lockscope == ne_lockscope_shared ? "shared" :
+                     "illegal value", len);
 }
 
 static void set_lockdepth(const char *set)
@@ -269,8 +339,10 @@ static void set_lockdepth(const char *set)
     else if (strcasecmp(set, "infinite") == 0 ||
 	     strcasecmp(set, "infinity") == 0)
 	lockdepth = NE_DEPTH_INFINITE;
-    else
-	printf("Invalid value for lockdepth. Try `set lockdepth' for more info.\n");
+    else {
+	out_printf("Invalid value for lockdepth. Try `set lockdepth' for more info.\n");
+        cmd_failed(_("invalid value"));
+    }
 }
 
 static void unset_lockdepth(const char *s)
@@ -278,14 +350,11 @@ static void unset_lockdepth(const char *s)
     lockdepth = NE_DEPTH_INFINITE;
 }
 
-static void disp_lockdepth(void)
+static void disp_lockdepth(char *buf, size_t len)
 {
-    if (lockdepth == NE_DEPTH_ZERO)
-	printf("zero");
-    else if (lockdepth == NE_DEPTH_INFINITE)
-	printf("infinite");
-    else
-	printf("illegal value");
+    ne_strnzcpy(buf, lockdepth == NE_DEPTH_ZERO ? "zero" :
+                     lockdepth == NE_DEPTH_INFINITE ? "infinite" :
+                     "illegal value", len);
 }
 
 
@@ -306,14 +375,10 @@ static void unset_searchdepth(const char *s)
     searchdepth = NE_DEPTH_INFINITE;
 }
 
-static void disp_searchdepth(void)
+static void disp_searchdepth(char *buf, size_t len)
 {
-    if (searchdepth == NE_DEPTH_ZERO)
-	printf("0");
-    else if (searchdepth == NE_DEPTH_ONE)
-	printf("1");
-    else
-	printf("infinity");
+    ne_strnzcpy(buf, searchdepth == NE_DEPTH_ZERO ? "0" :
+                     searchdepth == NE_DEPTH_ONE ? "1" : "infinity", len);
 }
 
 static const struct option *find_option(const char *name)
@@ -338,14 +403,16 @@ void execute_set(const char *opt, const char *newv)
 		switch (options[n].type) {
 		case opt_bool:
 		    if (newv) {
-			printf("%s is a boolean option.\n", opt);
+			out_printf("%s is a boolean option.\n", opt);
+                        cmd_failed(_("that option takes no value"));
 		    } else {
 			*(int *)options[n].holder = 1;
 		    }
 		    break;
 		case opt_string:
 		    if (newv == NULL) {
-			printf("You must give a new value for %s\n", opt);
+			out_printf("You must give a new value for %s\n", opt);
+                        cmd_failed(_("that option needs a value"));
 		    } else {
 			char *val = options[n].holder;
 			if (val != NULL) {
@@ -356,8 +423,9 @@ void execute_set(const char *opt, const char *newv)
 		    break;
 		case opt_handled:
 		    if (!newv) {
-			printf("%s must be given a value:\n%s\n", opt,
+			out_printf("%s must be given a value:\n%s\n", opt,
 				options[n].handle_help);
+                        cmd_failed(_("that option needs a value"));
 		    } else {
 			(*options[n].set)(newv);
 		    }
@@ -366,7 +434,8 @@ void execute_set(const char *opt, const char *newv)
 		return;
 	    }
 	}
-	printf("Unknown option: %s.\n", opt);
+	out_printf("Unknown option: %s.\n", opt);
+        cmd_failed(_("no such option"));
     }
 }
 
@@ -378,7 +447,7 @@ void execute_unset(const char *opt, const char *newv)
 	    switch (options[n].type) {
 	    case opt_bool:
 		if (newv != NULL) {
-		    printf("%s ia a boolean option.\n", opt);
+		    out_printf("%s ia a boolean option.\n", opt);
 		} else {
 		    *(int *)options[n].holder = 0;
 		}
@@ -386,7 +455,7 @@ void execute_unset(const char *opt, const char *newv)
 	    case opt_string:
 		/* FIXME: This is bad UI */
 		if (newv != NULL) {
-		    printf("%s cannot take a value to unset.\n", opt);
+		    out_printf("%s cannot take a value to unset.\n", opt);
 		} else {
 		    char *v = options[n].holder;
 		    free(v);
@@ -400,7 +469,7 @@ void execute_unset(const char *opt, const char *newv)
 	    return;
 	}
     }
-    printf("Unknown option: %s.\n", opt);
+    out_printf("Unknown option: %s.\n", opt);
 }
 
 void execute_describe(const char *name)
@@ -408,12 +477,13 @@ void execute_describe(const char *name)
     const struct option *opt = find_option(name);
 
     if (opt == NULL) {
-        printf("Option `%s' not known.\n", name);
+        out_printf("Option `%s' not known.\n", name);
+        cmd_failed(_("no such option"));
         return;
     }
 
-    printf("Option `%s': %s\n", opt->name, opt->help);
-    if (opt->handle_help) puts(opt->handle_help);
+    out_printf("Option `%s': %s\n", opt->name, opt->help);
+    if (opt->handle_help) out_puts_line(opt->handle_help);
 }
 
 void *get_option(enum option_id id)

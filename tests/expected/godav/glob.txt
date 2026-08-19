@@ -28,6 +28,8 @@ Deleting `/glob/g/hello.txt': succeeded.
 Deleting `/glob/g/second.txt': succeeded.
 Listing collection `/glob/g/': collection is empty.
 [Matching... no matches.]
-Uploading nosuch*.txt to `/glob/g/nosuch*.txt': Could not open file: Invalid argument
+Uploading nosuch*.txt to `/glob/g/nosuch*.txt': failed:
+could not open file: Invalid argument
 Deleting collection `/glob/g/': succeeded.
 Connection to `127.0.0.1' closed.
+-- cadaver exited 1 --

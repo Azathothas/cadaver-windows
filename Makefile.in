@@ -33,7 +33,7 @@ LIBS = @LIBS@ @NEON_LIBS@
 TARGET = cadaver$(EXEEXT)
 TARGET_DEPS = @TARGET_DEPS@
 OBJECTS = src/cadaver.o src/common.o src/commands.o src/ls.o \
-	src/cmdline.o src/options.o src/utils.o src/edit.o \
+	src/cmdline.o src/options.o src/output.o src/utils.o src/edit.o \
 	src/version.o src/search.o
 LIBOBJS = lib/basename.o lib/glob.o lib/rpmatch.o \
 	lib/yesno.o lib/getpass.o lib/mkstemp.o lib/system.o \
@@ -53,7 +53,7 @@ INSTALL = @INSTALL@
 all: $(TARGET)
 
 .PHONY: all subdirs install clean distclean check \
-	test-offline test-glob test-godav test-wsgidav
+	test-offline test-glob test-netrc test-godav test-wsgidav
 
 $(TARGET): $(ALLOBJS) $(TARGET_DEPS) | subdirs
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(ALLOBJS) $(LIBS)
@@ -84,7 +84,7 @@ install: $(TARGET)
 # a server is started.  OPTS is passed through to the session tests, so
 # "make check OPTS=--regenerate" rewrites the expected transcripts after
 # a deliberate change; read the diff before committing it.
-check: test-offline test-glob test-godav test-wsgidav
+check: test-offline test-glob test-netrc test-godav test-wsgidav
 
 # No server, no network, under a second.
 test-offline: $(TARGET)
@@ -93,6 +93,11 @@ test-offline: $(TARGET)
 # Unit tests for lib/glob.c; needs a compiler and nothing else.
 test-glob:
 	$(top_srcdir)/tests/glob.sh
+
+# The same for lib/netrc.c, whose mistakes are otherwise invisible: a
+# password it mangles fails to authenticate and names nothing.
+test-netrc:
+	$(top_srcdir)/tests/netrc.sh
 
 # The scripted sessions against golang.org/x/net/webdav, which locks
 # correctly but has no dead property store.
@@ -120,6 +125,8 @@ src/edit.o: src/edit.c src/cadaver.h src/options.h src/common.h
 src/common.o: src/common.c src/common.h config.h
 src/ls.o: src/ls.c src/commands.h src/cadaver.h config.h
 src/search.o: src/search.c src/commands.h src/cadaver.h config.h
+src/output.o: src/output.c src/output.h src/cadaver.h src/commands.h \
+	src/utils.h config.h
 src/utils.o: src/utils.c src/utils.h src/cadaver.h config.h
 src/version.o: src/version.c src/utils.h src/cadaver.h config.h
 lib/glob.o: lib/glob.c lib/glob.h config.h

@@ -1,0 +1,9 @@
+# The overwritten file is still the resource, byte for byte.
+cmp "$WORK/hello.txt" "$WORK/copy.txt"
+# A download that failed must leave nothing behind: the file it would
+# have created used to be made before the request and left at zero
+# length, which made the next attempt prompt instead of downloading.
+if [ -e "$WORK/missing.txt" ]; then
+    echo "a failed get left $WORK/missing.txt behind"
+    exit 1
+fi

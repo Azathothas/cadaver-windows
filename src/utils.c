@@ -26,6 +26,7 @@
 #include <sys/types.h>
 
 #include <ne_basic.h>
+#include <ne_string.h>
 #include <ne_uri.h>
 
 #include "i18n.h"
@@ -97,3 +98,31 @@ char *format_time(time_t when)
     return "???";
 }
 
+/* Writes `when' into `buf' as an ISO 8601 UTC timestamp with second
+ * precision and a trailing Z. */
+int iso8601_utc(time_t when, char *buf, size_t buflen)
+{
+    struct tm *utc = gmtime(&when);
+
+    if (utc == NULL
+        || strftime(buf, buflen, "%Y-%m-%dT%H:%M:%SZ", utc) == 0) {
+        if (buflen) buf[0] = '\0';
+        return 0;
+    }
+
+    return 1;
+}
+
+void xml_escape(ne_buffer *buf, const char *str)
+{
+    for (; str && *str; str++) {
+        switch (*str) {
+        case '&': ne_buffer_czappend(buf, "&amp;"); break;
+        case '<': ne_buffer_czappend(buf, "&lt;"); break;
+        case '>': ne_buffer_czappend(buf, "&gt;"); break;
+        case '"': ne_buffer_czappend(buf, "&quot;"); break;
+        case '\'': ne_buffer_czappend(buf, "&apos;"); break;
+        default: ne_buffer_append(buf, str, 1); break;
+        }
+    }
+}

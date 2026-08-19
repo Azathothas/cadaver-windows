@@ -22,3 +22,4 @@ Deleting collection `/copymove/dest/': succeeded.
 Deleting collection `/copymove/src/': succeeded.
 Listing collection `/copymove/': collection is empty.
 Connection to `127.0.0.1' closed.
+-- cadaver exited 0 --

@@ -1,0 +1,7 @@
+Uploading hello.txt to `/netrc/hello.txt': [.. succeeded.
+Listing collection `/netrc/': succeeded.
+        hello.txt                             28  <DATE>
+Deleting `/netrc/hello.txt': succeeded.
+Listing collection `/netrc/': collection is empty.
+Connection to `127.0.0.1' closed.
+-- cadaver exited 0 --

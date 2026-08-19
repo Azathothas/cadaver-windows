@@ -91,18 +91,27 @@ static int has_glob_pattern(const char *str) {
  * Returns the token, malloc()-allocated, or NULL on end-of-line.
  * Position updated to point after token.
  */
-static char *gettoken(const char *line, const char **pointer) 
+static char *gettoken(const char *line, const char **pointer)
 {
     const char *pnt;
-    int state = 0, pos = 0;
-    char buf[BUFSIZ], quote = 0; /* = 0 to keep gcc -Wall happy */
-    
+    int state = 0;
+    char quote = 0; /* = 0 to keep gcc -Wall happy */
+    /* Grown to fit rather than a fixed BUFSIZ array: a token that long
+     * used to make this return NULL, which the caller reads as end of
+     * line, so the rest of the command was dropped without a word.
+     * BUFSIZ is 512 on Windows, which a deep path with escaped UTF-8 in
+     * it reaches without trying. */
+    ne_buffer *buf = ne_buffer_create();
+    size_t pos;
+    char *token;
+
     pnt = *pointer;
-    
+
 #define ISQUOTE(x) (x=='\'' || x=='\"')
 #define ISWHITE(x) (x==' ' || x=='\t')
+#define KEEP(c) ne_buffer_append(buf, &(c), 1)
 
-     while (*pnt != '\0' && state != 9 && pos < BUFSIZ) {
+     while (*pnt != '\0' && state != 9) {
 	 switch (state) {
 	 case 0: /* leading whitespace chew */
 	     if (ISQUOTE(*pnt)) {
@@ -111,7 +120,7 @@ static char *gettoken(const char *line, const char **pointer)
 	     } else if (*pnt == '#') {
 		 state = 8;
 	     } else if (!ISWHITE(*pnt)) {
-		 buf[pos++] = *pnt;
+		 KEEP(*pnt);
 		 state = 1;
 	     }
 	     break;
@@ -123,7 +132,7 @@ static char *gettoken(const char *line, const char **pointer)
 	     } else if (BACKSLASH_QUOTES && *pnt == '\\') {
 		 state = 3;
 	     } else {
-		 buf[pos++] = *pnt;
+		 KEEP(*pnt);
 	     }
 	     break;
 	 case 2: /* quoted chew */
@@ -132,16 +141,16 @@ static char *gettoken(const char *line, const char **pointer)
 	     } else if (BACKSLASH_QUOTES && *pnt == '\\') {
                 state = 4;
 	     } else {
-		 buf[pos++] = *pnt;
+		 KEEP(*pnt);
 	     }
 	     break;
 	 case 3: /* chew an escaped literal */
-	     buf[pos++] = *pnt;
+	     KEEP(*pnt);
 	     state = 1;
 	     break;
 	 case 4: /* backslash in quoted chew... like 3 except
 		  * we switch back to state 2 afterwards */
-	     buf[pos++] = *pnt;
+	     KEEP(*pnt);
 	     state = 2;
 	     break;
 	 case 5: /* comment chew */
@@ -152,15 +161,14 @@ static char *gettoken(const char *line, const char **pointer)
 
 #undef ISQUOTE
 #undef ISWHITE
+#undef KEEP
 
      /* A backslash at the end of the line quotes nothing, so it stands
       * for itself. */
-     if ((state == 3 || state == 4) && pos < BUFSIZ) buf[pos++] = '\\';
+     if (state == 3 || state == 4) ne_buffer_czappend(buf, "\\");
 
-     /* overflowed the buffer */
-     if (pos >= BUFSIZ) return NULL;
-
-     buf[pos] = '\0';
+     pos = buf->used - 1;
+     token = ne_buffer_finish(buf);
      *pointer = pnt;
      if (pos > 0) {
 #ifdef I_AM_A_LUMBERJACK
@@ -168,13 +176,17 @@ static char *gettoken(const char *line, const char **pointer)
 	  * 1) is this really useful?
 	  * 2) this should be done in parse_command not gettoken
 	  */
-	 if (buf[0] == '$') {
-	     char *val = getenv(&buf[1]);
-	     if (val) return ne_strdup(val);
+	 if (token[0] == '$') {
+	     char *val = getenv(&token[1]);
+	     if (val) {
+                 ne_free(token);
+                 return ne_strdup(val);
+             }
 	 }
 #endif
-	 return ne_strdup(buf);
+	 return token;
      } else {
+         ne_free(token);
 	 return NULL;
      }
 }
@@ -275,6 +287,7 @@ static void davglob_interrupt(int sig) {
 static int davglob_errfunc(const char *filename, int errcode) 
 {
     output(o_finish, "Error on %s: %s\n", filename, strerror(errcode));
+    cmd_failed(strerror(errcode));
     return 0;
 }
 
@@ -342,15 +355,21 @@ do {								\
 	    } break;
 	    case GLOB_NOSPACE:
 		output(o_finish, "failed: out of memory.]\n");
+                cmd_failed(_("out of memory expanding a wildcard"));
 		break;
 	    case GLOB_ABORTED:
 		output(o_finish, "aborted]\n");
+                cmd_failed(_("interrupted expanding a wildcard"));
 		break;
 	    case GLOB_NOMATCH:
+                /* Not a failure in itself: the pattern is passed
+                 * through unexpanded, as a shell does, and the command
+                 * then reports what happened to it. */
 		output(o_finish, "no matches.]\n");
 		break;
 	    default:
 		output(o_finish, "failed.]\n");
+                cmd_failed(_("could not expand a wildcard"));
 	    }
 	    if (ret) {
 		/* For all the failure cases, put in the glob instead.

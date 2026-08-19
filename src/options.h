@@ -41,6 +41,7 @@ enum option_id {
     opt_lockstore,
     opt_lockdepth,
     opt_lockscope,
+    opt_clobber,
     opt_pager,
    
     opt_searchdepth,
@@ -48,6 +49,23 @@ enum option_id {
     opt_searchdorder,
     opt_searchall
 };
+
+/* What `get' does when the local file already exists.  Asking is right
+ * in front of a terminal and useless in a script, where the answer
+ * would be read from the command stream or from end of input; the
+ * option is how a script says which it wants instead. */
+enum clobber_mode {
+    clobber_ask = 0,   /* prompt for another name; the default */
+    clobber_yes,       /* overwrite it */
+    clobber_no         /* leave it alone and fail */
+};
+
+extern enum clobber_mode clobber;
+
+/* Sets the option from the name of a mode.  Returns non-zero if `what'
+ * is not one, having said so on standard error -- it is called from the
+ * command line as well as from `set'. */
+int set_clobber(const char *what);
 
 extern int lockdepth; /* current lock depth setting. */
 extern int searchdepth; /* current search depth setting. */

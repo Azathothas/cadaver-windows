@@ -19,6 +19,8 @@
 
 */
 
+#include <ne_string.h> /* for ne_buffer */
+
 #include "cadaver.h"
 
 /* Returns resource type of resource with given URI; where resr_error
@@ -27,3 +29,17 @@ enum resource_type getrestype(const char *uri);
 
 /* Returns time to display */
 char *format_time(time_t when);
+
+/* Writes `when' into `buf' as an ISO 8601 UTC timestamp with second
+ * precision and a trailing Z, e.g. 2026-08-19T13:04:54Z.  Returns
+ * non-zero on success.  Used for the timestamps in --json output, which
+ * carry no sub-second part because the servers this reads them from do
+ * not either. */
+int iso8601_utc(time_t when, char *buf, size_t buflen);
+
+/* Appends `str' to `buf' with the five characters that are not
+ * themselves in XML character data replaced by entity references.  neon
+ * has no such helper: ne_locks.c concatenates the lock owner into the
+ * request body verbatim, so cadaver has to hand it something that is
+ * already well-formed. */
+void xml_escape(ne_buffer *buf, const char *str);

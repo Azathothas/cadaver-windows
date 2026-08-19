@@ -1,0 +1,11 @@
+# Credentials from a .netrc, against the one subtree of the test server
+# that requires them.  The password holds an apostrophe: stripping one
+# is upstream issue #75, and the reporter's generated password worked
+# with every other WebDAV client.  If the parser mangles it, everything
+# here fails with 401.
+lcd @WORK@
+put hello.txt
+ls
+delete hello.txt
+ls
+quit

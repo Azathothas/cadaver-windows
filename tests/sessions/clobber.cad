@@ -1,0 +1,20 @@
+# What `get' does when the local file is already there.  The default
+# asks, which in a script reads end of input and fails; clobber yes
+# overwrites and clobber no refuses.  A failed download must leave the
+# local file as it was rather than empty.
+lcd @WORK@
+mkcol clob
+cd clob
+put hello.txt
+get hello.txt copy.txt
+get hello.txt copy.txt
+set clobber no
+get hello.txt copy.txt
+set clobber yes
+get hello.txt copy.txt
+set clobber ask
+get nosuchresource missing.txt
+lls
+cd ..
+rmcol clob
+quit

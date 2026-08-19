@@ -95,6 +95,10 @@ static void display_ls_line(struct resource *res)
     char exec_char, vcr_char;
     char *native_path;
 
+    /* Before the name is cut down to its last segment below. */
+    res_listing(res->uri, res->type, res->size, res->modtime,
+                res->is_executable, res->error_status, res->error_reason);
+
     switch (res->type) {
     case resr_normal: restype = ""; break;
     case resr_reference: restype = _("Ref:"); break;
@@ -117,13 +121,14 @@ static void display_ls_line(struct resource *res)
     native_path = native_path_from_uri(path);
 
     if (res->type == resr_error) {
-	printf(_("Error: %-30s %d %s\n"), native_path, res->error_status,
+	out_printf(_("Error: %-30s %d %s\n"), native_path, res->error_status,
 	       res->error_reason?res->error_reason:_("unknown"));
+        cmd_failed(res->error_reason);
     } else {
 	exec_char = res->is_executable ? '*' : ' ';
 	/* 0: no vcr, 1: checkin, 2: checkout */
 	vcr_char = res->is_vcr==0 ? ' ' : (res->is_vcr==1? '>' : '<');
-	printf("%5s %c%c%-29s %10" FMT_DAV_SIZE_T "u  %s\n", 
+	out_printf("%5s %c%c%-29s %10" FMT_DAV_SIZE_T "u  %s\n", 
 	       restype, vcr_char, exec_char, native_path,
 	       res->size, format_time(res->modtime));
     }
@@ -147,7 +152,8 @@ void execute_ls(const char *native_path)
     if (ret == NE_OK) {
 	/* Easy this, eh? */
 	if (reslist == NULL) {
-	    output(o_finish, _("collection is empty.\n"));
+            /* An empty collection is an answer, not a failure. */
+	    out_success_as(_("collection is empty.\n"));
 	} else {
 	    out_success();
 	    for (current = reslist; current!=NULL; current = next) {

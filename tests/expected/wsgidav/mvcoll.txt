@@ -1,0 +1,28 @@
+Creating `before': succeeded.
+Uploading hello.txt to `/mvcoll/before/hello.txt': [.. succeeded.
+Listing collection `/mvcoll/': succeeded.
+Coll:   before                                 0  <DATE>
+Moving `/mvcoll/before/' to `/mvcoll/after/': succeeded.
+Listing collection `/mvcoll/': succeeded.
+Coll:   after                                  0  <DATE>
+Listing collection `/mvcoll/after/': succeeded.
+        hello.txt                             28  <DATE>
+Creating `target': succeeded.
+Moving `/mvcoll/after/' to `/mvcoll/target/after': succeeded.
+Listing collection `/mvcoll/': succeeded.
+Coll:   target                                 0  <DATE>
+Listing collection `/mvcoll/target/': succeeded.
+Coll:   after                                  0  <DATE>
+Uploading second.txt to `/mvcoll/plain.txt': [.. succeeded.
+Creating `another': succeeded.
+Error: Refusing to move collection '/mvcoll/another/' to non-collection '/mvcoll/plain.txt'
+Listing collection `/mvcoll/': succeeded.
+Coll:   another                                0  <DATE>
+Coll:   target                                 0  <DATE>
+        plain.txt                             16  <DATE>
+Deleting collection `/mvcoll/target/': succeeded.
+Deleting `/mvcoll/plain.txt': succeeded.
+Listing collection `/mvcoll/': succeeded.
+Coll:   another                                0  <DATE>
+Connection to `127.0.0.1' closed.
+-- cadaver exited 1 --

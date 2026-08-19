@@ -9,6 +9,25 @@
 # ends in a slash; a fresh one is made under it for every session, so
 # one session cannot leave anything behind that another trips over.
 #
+# A session is tests/sessions/NAME.cad, and may bring four more files:
+#
+#   NAME.flags    extra arguments for the cadaver command line, one per
+#                 line, so that a session can be run with --json or
+#                 --trace
+#   NAME.home     a .netrc, placed in a home directory of the session's
+#                 own; HOME points at it for the session and for the
+#                 setup run before it
+#   NAME.stdin    what to feed cadaver's standard input, for a session
+#                 that has to answer a prompt.  Without it standard
+#                 input is at end of file, as a script's would be
+#   NAME.servers  the servers the session applies to, one per line.
+#                 Without it the session runs against both
+#   NAME.check    a shell snippet run afterwards with $WORK set, for
+#                 what a transcript cannot show
+#
+# All four go through tests/expand.py, so @WORK@ and @EDITOR@ mean the
+# same in them as in the session script.
+#
 # NAME selects the directory of expected output, tests/expected/NAME,
 # because the two test servers legitimately disagree: x/net/webdav has
 # no dead property store and wsgidav's LOCK response is not usable, so
@@ -79,11 +98,6 @@ fi
 EXPECTED="tests/expected/$NAME"
 mkdir -p "$EXPECTED"
 
-OUT=session-results/$NAME
-rm -rf "$OUT"
-mkdir -p "$OUT"
-OUTABS=`cd "$OUT" && pwd`
-
 # cadaver is a native Windows program under MSYS2, so it needs a
 # Windows-style path for anything it opens itself; a /c/... path means
 # nothing to it.
@@ -94,6 +108,13 @@ native_path() {
         echo "$1"
     fi
 }
+
+OUT=session-results/$NAME
+rm -rf "$OUT"
+mkdir -p "$OUT"
+OUTABS=`cd "$OUT" && pwd`
+OUTNATIVE=`native_path "$OUTABS"`
+
 
 # The port, so that a transcript does not depend on which one the
 # server happened to get.
@@ -121,6 +142,15 @@ for name in $SESSIONS; do
     if [ ! -f "$script" ]; then
         echo "session.sh: no such session: $name" >&2
         exit 2
+    fi
+
+    # A session may name the servers it applies to: authentication is
+    # only set up on one of them, and dead properties only work on the
+    # other.
+    if [ -f "tests/sessions/$name.servers" ] \
+       && ! grep -qx "$NAME" "tests/sessions/$name.servers"; then
+        printf '%-10s skipped (not for %s)\n' "$name" "$NAME"
+        continue
     fi
 
     WORK="$OUT/$name"
@@ -151,19 +181,63 @@ for name in $SESSIONS; do
     "$PYTHON" tests/expand.py "$script" "$OUT/$name.cad" \
         "@WORK@=$WORKNATIVE" "@EDITOR@=$EDITOR_NATIVE"
 
+    # Extra command-line arguments, if the session asked for any.
+    FLAGS=
+    if [ -f "tests/sessions/$name.flags" ]; then
+        "$PYTHON" tests/expand.py "tests/sessions/$name.flags" \
+            "$OUT/$name.flags" "@WORK@=$WORKNATIVE" \
+            "@EDITOR@=$EDITOR_NATIVE" "@OUT@=$OUTNATIVE"
+        FLAGS=`tr '\n' ' ' < "$OUT/$name.flags"`
+    fi
+
+    # A home directory of the session's own, holding the .netrc it
+    # brought.  Sessions without one still get an empty directory, so
+    # that a .netrc in the real home cannot reach any of them.  It goes
+    # beside the working directory rather than inside it: `lls' lists
+    # the working directory, and a home directory in there would show up
+    # in the transcript of every session that runs one.
+    rm -rf "$OUT/$name-home"
+    mkdir -p "$OUT/$name-home"
+    SESSION_HOME=`native_path "$OUTABS/$name-home"`
+    if [ -f "tests/sessions/$name.home" ]; then
+        "$PYTHON" tests/expand.py "tests/sessions/$name.home" \
+            "$OUT/$name-home/.netrc" "@WORK@=$WORKNATIVE" "@PORT@=$PORT"
+    fi
+
+    # What to feed standard input.  End of file unless the session says
+    # otherwise, which is what a script would give it.
+    STDIN=/dev/null
+    if [ -f "tests/sessions/$name.stdin" ]; then
+        "$PYTHON" tests/expand.py "tests/sessions/$name.stdin" \
+            "$OUT/$name.stdin" "@WORK@=$WORKNATIVE"
+        STDIN="$OUT/$name.stdin"
+    fi
+
     # Each session gets an empty collection of its own, made through
     # the server rather than in the file system so that this works
     # against a server that is not backed by one.  Removing it first
     # covers a leftover from an interrupted run, which would otherwise
     # make MKCOL fail and every session look broken.
     printf 'rmcol %s\nmkcol %s\nquit\n' "$name" "$name" > "$OUT/$name.setup"
-    "$CADAVER" -r "`native_path "$OUTABS/$name.setup"`" "$URL" \
-        < /dev/null > "$OUT/$name.setup.log" 2>&1 || :
+    # The same standard input as the session, because a session that
+    # answers an authentication prompt has to answer it here too or the
+    # collection it works in never gets made.  Each is a separate
+    # process, so each reads the file from the beginning.
+    ( HOME=$SESSION_HOME; export HOME
+      "$CADAVER" -r "`native_path "$OUTABS/$name.setup"`" "$URL" \
+        < "$STDIN" ) > "$OUT/$name.setup.log" 2>&1 || :
 
     printf '%-10s ' "$name"
 
-    ( cd "$WORK" && "$CADAVER" -r "`native_path "$OUTABS/$name.cad"`" \
-        "$URL$name/" ) < /dev/null > "$OUT/$name.raw" 2>&1 || :
+    # The exit status is the whole point of several of these sessions
+    # and a transcript cannot show it, so it goes on the end of one.
+    STATUS=0
+    ( cd "$WORK" && HOME=$SESSION_HOME; export HOME
+      # shellcheck disable=SC2086
+      "$CADAVER" $FLAGS -r "`native_path "$OUTABS/$name.cad"`" \
+        "$URL$name/" ) < "$STDIN" > "$OUT/$name.raw" 2>&1 || STATUS=$?
+
+    printf -- '-- cadaver exited %d --\n' "$STATUS" >> "$OUT/$name.raw"
 
     "$PYTHON" tests/normalise.py --port "$PORT" --work "$WORKNATIVE" \
         --editor "$EDITOR_NATIVE" \

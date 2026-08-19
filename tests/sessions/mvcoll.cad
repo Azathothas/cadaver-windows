@@ -1,0 +1,23 @@
+# Renaming a collection with `mv', which is upstream issue #54: a
+# destination that does not exist yet is a rename, and only a
+# destination that exists and is not a collection may be refused.
+# `move coll into-existing-coll' must still nest rather than rename.
+lcd @WORK@
+mkcol before
+put hello.txt before/hello.txt
+ls
+move before after
+ls
+ls after
+mkcol target
+move after target
+ls
+ls target
+put second.txt plain.txt
+mkcol another
+move another plain.txt
+ls
+rmcol target
+delete plain.txt
+ls
+quit

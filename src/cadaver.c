@@ -94,6 +94,21 @@ struct session session;
 int tolerant; /* tolerate DAV-enabledness failure */
 int in_completion; /* non-zero if in completion. */
 
+/* Where --trace writes, NULL when not tracing, and whether it is a file
+ * of cadaver's own to close.  --verbose widens what goes there from the
+ * request and response headers to everything neon reports. */
+static FILE *trace_fp;
+static int trace_needs_close;
+static int verbose;
+
+/* Everything neon can report except NE_DBG_HTTPPLAIN, which is the
+ * credentials in the clear.  --verbose is for diagnosing a connection,
+ * a handshake or an authentication exchange; it is not a reason to
+ * write a password into a log file.  `set debug cleartext' still is. */
+#define TRACE_MASK (NE_DBG_HTTP | NE_DBG_HTTPBODY | NE_DBG_XML | \
+                    NE_DBG_XMLPARSE | NE_DBG_SOCKET | NE_DBG_SSL | \
+                    NE_DBG_HTTPAUTH | NE_DBG_LOCKS | DEBUG_FILES)
+
 /* Current output state */
 static enum out_state {
     out_none, /* not doing anything */
@@ -112,6 +127,11 @@ static void quit_handler(int signo);
 static void notifier(void *ud, ne_session_status status, 
                      const ne_session_status_info *info);
 static void pretty_progress_bar(ne_off_t progress, ne_off_t total);
+static void hook_create_request(ne_request *req, void *userdata,
+                                const char *method, const char *target);
+static void hook_pre_send(ne_request *req, void *userdata, ne_buffer *hdr);
+static void hook_post_headers(ne_request *req, void *userdata,
+                              const ne_status *status);
 static int supply_creds_server(void *userdata, const char *realm, int attempt,
 			       char *username, char *password);
 static int supply_creds_proxy(void *userdata, const char *realm, int attempt,
@@ -124,22 +144,29 @@ static void usage(void)
      * profile and the path is one the user can paste into a shell. */
     char *deflt = cad_home_path(".cadaverrc");
 
-    printf(_(
+    out_printf(_(
 "Usage: %s [OPTIONS] URL\n"
 "  URL must be an absolute URI using the http: or https: scheme.\n"
 "Options:\n"
 "  -t, --tolerant            Allow cd/open into non-WebDAV enabled collection.\n"
 "  -r, --rcfile=FILE         Read script from FILE instead of the default.\n"
 "  -p, --proxy=PROXY[:PORT]  Use proxy host PROXY and optional proxy port PORT.\n"
+"  -c, --clobber=WHAT        What `get' does when the local file exists: ask,\n"
+"                            which is the default, yes to overwrite, or no.\n"
+"  -j, --json                Write one JSON object describing the session to\n"
+"                            standard output, and nothing else.\n"
+"  -T, --trace[=FILE]        Dump every request and response to FILE; standard\n"
+"                            error if FILE is omitted, standard output for `-'.\n"
+"  -v, --verbose             Widen the trace to everything neon reports.\n"
 "  -V, --version             Display version information.\n"
 "  -h, --help                Display this help message.\n"), progname);
 
     if (deflt) {
-        printf(_("The default rcfile is %s\n"), deflt);
+        out_printf(_("The default rcfile is %s\n"), deflt);
         ne_free(deflt);
     }
 
-    printf(_("Please report bugs via <https://github.com/Azathothas/"
+    out_printf(_("Please report bugs via <https://github.com/Azathothas/"
              "cadaver-windows>\n"));
 }
 
@@ -160,7 +187,7 @@ void close_connection(void)
     if (session.sess) ne_session_destroy(session.sess);
     session.sess = NULL;
     if (session.connected && session.uri.host)
-        printf(_("Connection to `%s' closed.\n"), session.uri.host);
+        out_printf(_("Connection to `%s' closed.\n"), session.uri.host);
     session.connected = false;
     ne_uri_free(&session.uri);
     if (session.lastwp)
@@ -172,22 +199,39 @@ void close_connection(void)
  * collection. */
 int set_path(const char *uri_path)
 {
-    int is_coll = (getrestype(uri_path) == resr_collection);
+    enum resource_type type = getrestype(uri_path);
+    int is_coll = type == resr_collection;
+
     if (is_coll || tolerant) {
 	if (!is_coll) {
 	    session.isdav = 0;
-	    printf(_("Ignored error: %s not WebDAV-enabled:\n%s\n"), uri_path,
+	    out_printf(_("Ignored error: %s not WebDAV-enabled:\n%s\n"), uri_path,
 		   ne_get_error(session.sess));
 	} else {
 	    session.isdav = 1;
 	}
 	return 0;
     }
-    else {
-	printf(_("Could not access %s (not WebDAV-enabled?):\n%s\n"), uri_path,
-	       ne_get_error(session.sess));
-	return 1;
+
+    /* The two ways this fails are not the same thing, and saying "not
+     * WebDAV-enabled?" for both sent the reporter of upstream issue #4
+     * looking in the wrong place: their server answered the PROPFIND
+     * perfectly well but wrote <collection/> without the DAV namespace,
+     * so cadaver did not recognise the collection. */
+    if (type == resr_error) {
+        out_printf(_("Could not access %s (not WebDAV-enabled?):\n%s\n"),
+                   uri_path, ne_get_error(session.sess));
     }
+    else {
+        out_printf(_("Could not access %s: the server answered, but did not "
+                     "report it as a collection.\n"
+                     "A server whose PROPFIND names the resourcetype without "
+                     "the DAV: namespace looks like this.\n"
+                     "Use -t (or `set tolerant on') to use it anyway.\n"),
+                   uri_path);
+    }
+
+    return 1;
 }
 
 static int cert_verify(void *ud, int failures, const ne_ssl_certificate *c)
@@ -198,39 +242,39 @@ static int cert_verify(void *ud, int failures, const ne_ssl_certificate *c)
     ident = ne_ssl_cert_identity(c);
 
     if (ident)
-        printf(_("WARNING: Untrusted server certificate presented for `%s':\n"),
+        out_printf(_("WARNING: Untrusted server certificate presented for `%s':\n"),
                ident);
     else
-        puts(_("WARNING: Untrusted server certificate presented:\n"));
+        out_puts_line(_("WARNING: Untrusted server certificate presented:\n"));
 
 #if NE_MINIMUM_VERSION(0, 31)
     tmp = ne_ssl_cert_hdigest(c, NE_HASH_SHA256|NE_HASH_COLON);
     if (tmp) {
-        printf(_("Server certificate SHA-256 digest: %s\n"), tmp);
+        out_printf(_("Server certificate SHA-256 digest: %s\n"), tmp);
         ne_free(tmp);
     }
 #endif
 
     if (failures & NE_SSL_IDMISMATCH) {
-	printf(_("Certificate was issued to hostname `%s' rather than `%s'\n"),
+	out_printf(_("Certificate was issued to hostname `%s' rather than `%s'\n"),
 	       ne_ssl_cert_identity(c), session.uri.host);
-	printf(_("This connection could have been intercepted.\n"));
+	out_printf(_("This connection could have been intercepted.\n"));
     }
 
 #define PRINT_AND_FREE(str, dn) \
-tmp = ne_ssl_readable_dname(dn); printf(str, tmp); free(tmp)
+tmp = ne_ssl_readable_dname(dn); out_printf(str, tmp); free(tmp)
 
     PRINT_AND_FREE(_("Issued to: %s\n"), ne_ssl_cert_subject(c));
     PRINT_AND_FREE(_("Issued by: %s\n"), ne_ssl_cert_issuer(c));
 
     ne_ssl_cert_validity(c, from, to);
-    printf(_("Certificate is valid from %s to %s\n"), from, to);
+    out_printf(_("Certificate is valid from %s to %s\n"), from, to);
 
     if (isatty(STDIN_FILENO)) {
-	printf(_("Do you wish to accept the certificate? (y/n) "));
+	out_printf(_("Do you wish to accept the certificate? (y/n) "));
 	return !yesno();
     } else {
-	printf(_("Certificate rejected.\n"));
+	out_printf(_("Certificate rejected.\n"));
 	return -1;
     }
 }
@@ -251,7 +295,7 @@ static void setup_ssl(ne_session *sess)
 #if NE_MINIMUM_VERSION(0, 35)
         cc = ne_ssl_clicert_fromuri(ccuri, 0);
 #else
-        printf(_("Client certificate URIs are supported "
+        out_printf(_("Client certificate URIs are supported "
                  "with this version of neon.\n"));
 #endif
     }
@@ -264,7 +308,8 @@ static void setup_ssl(ne_session *sess)
     if (!name) return;
 
     if (!cc) {
-        printf(_("Could not load client certificate from `%s'.\n"), name);
+        out_printf(_("Could not load client certificate from `%s'.\n"), name);
+        cmd_failed(_("could not load the client certificate"));
         return;
     }
 
@@ -274,13 +319,13 @@ static void setup_ssl(ne_session *sess)
         
         if (!friendly) friendly = name;
         
-        printf("Client certificate `%s' is encrypted.\n", friendly);
+        out_printf("Client certificate `%s' is encrypted.\n", friendly);
 
         for (n = 0; n < 3; n++) {
             char *pass = fm_getpassword(_("Decryption password: "));
             if (pass == NULL) break;
             if (ne_ssl_clicert_decrypt(cc, pass)) {
-                printf("Password incorrect, try again.\n");
+                out_printf("Password incorrect, try again.\n");
             }
             else {
                 break;
@@ -289,7 +334,7 @@ static void setup_ssl(ne_session *sess)
     }
     
     if (!ne_ssl_clicert_encrypted(cc)) {
-        printf("Using client certificate.\n");
+        out_printf("Using client certificate.\n");
         ne_ssl_set_clicert(session.sess, cc);
     }
 
@@ -308,12 +353,14 @@ void open_connection(const char *url)
     /* Parse the URL */
     if (ne_uri_parse(url, &session.uri) || session.uri.path == NULL
         || session.uri.scheme == NULL || session.uri.host  == NULL) {
-        printf(_("Could not parse URL `%s'\n"), url);
+        out_printf(_("Could not parse URL `%s'\n"), url);
+        cmd_failed(_("could not parse the URL"));
         goto fail;
     }
 
     if (session.uri.userinfo) {
-        printf(_("User info must not be used in URL `%s'\n"), url);
+        out_printf(_("User info must not be used in URL `%s'\n"), url);
+        cmd_failed(_("credentials must not be in the URL"));
         goto fail;
     }
 
@@ -333,15 +380,21 @@ void open_connection(const char *url)
 
     if (ne_strcasecmp(session.uri.scheme, "https") == 0) {
         if (!ne_has_support(NE_FEATURE_SSL)) {
-            printf(_("No SSL/TLS support, cannot use URL `%s'\n"), url);
-            goto fail;
+            out_printf(_("No SSL/TLS support, cannot use URL `%s'\n"), url);
+            cmd_failed(_("no TLS support in this build"));
+        goto fail;
         }
         setup_ssl(sess);
     }
     else if (ne_strcasecmp(session.uri.scheme, "http")) {
-        printf(_("URL scheme '%s' not supported.\n"), session.uri.scheme);
+        out_printf(_("URL scheme '%s' not supported.\n"), session.uri.scheme);
+        cmd_failed(_("unsupported URL scheme"));
         goto fail;
     }
+
+    ne_hook_create_request(sess, hook_create_request, NULL);
+    ne_hook_post_headers(sess, hook_post_headers, NULL);
+    if (trace_fp) ne_hook_pre_send(sess, hook_pre_send, NULL);
 
     ne_lockstore_register(session.locks, sess);
     ne_redirect_register(sess);
@@ -359,10 +412,13 @@ void open_connection(const char *url)
 	netrc_entry *found;
 	found = search_netrc(netrc_list, session.uri.host);
 	if (found != NULL) {
-	    if (found->account && found->password) {
-		server_username = found->account;
-		server_password = found->password;
-	    }
+            /* Whichever fields the entry has.  An entry with a login
+             * and no password used to be ignored entirely, so cadaver
+             * prompted for both and the .netrc looked broken --
+             * upstream issue #25.  supply_creds_server() now fills in
+             * what is there and asks only for the rest. */
+            if (found->account) server_username = found->account;
+            if (found->password) server_password = found->password;
 	}
     }
 #endif /* ENABLE_NETRC */
@@ -387,30 +443,37 @@ void open_connection(const char *url)
     switch (ret) {
     case NE_OK:
         if ((session.caps & NE_CAP_DAV_CLASS1) == 0) {
-            printf(_("%s: Location does not advertise WebDAV class 1 support.\n"),
+            out_printf(_("%s: Location does not advertise WebDAV class 1 support.\n"),
                    tolerant ? _("Warning") : _("Error"));
-            if (!tolerant) break;
+            if (!tolerant) {
+                cmd_failed(_("the location does not advertise WebDAV class 1"));
+                break;
+            }
         }
 	if (set_path(session.uri.path) == 0) {
             session.connected = true;
             return;
         }
+        cmd_failed(ne_get_error(session.sess));
         break;
     case NE_CONNECT:
 	if (proxy_host) {
-	    printf(_("Could not connect to `%s' on port %d:\n%s\n"),
+	    out_printf(_("Could not connect to `%s' on port %d:\n%s\n"),
 		   proxy_hostname, proxy_port, ne_get_error(session.sess));
 	} else {
-	    printf(_("Could not connect to `%s' on port %d:\n%s\n"),
+	    out_printf(_("Could not connect to `%s' on port %d:\n%s\n"),
 		   session.uri.host, session.uri.port, ne_get_error(session.sess));
 	}
+        cmd_failed(ne_get_error(session.sess));
 	break;
     case NE_LOOKUP:
-	puts(ne_get_error(session.sess));
+	out_puts_line(ne_get_error(session.sess));
+        cmd_failed(ne_get_error(session.sess));
 	break;
     default:
-	printf(_("Could not open collection:\n%s\n"),
+	out_printf(_("Could not open collection:\n%s\n"),
 	       ne_get_error(session.sess));
+        cmd_failed(ne_get_error(session.sess));
 	break;
     }
 
@@ -419,6 +482,120 @@ fail:
 }
        
 /* Sets proxy server from hostport argument */    
+/* Opens the --trace destination.  Returns non-zero if it could not be
+ * opened, having said so on standard error. */
+static int open_trace(const char *fname)
+{
+    if (fname == NULL || *fname == '\0') {
+        trace_fp = stderr;
+    }
+    else if (strcmp(fname, "-") == 0) {
+        if (out_trace_claims_stdout()) return 1;
+        trace_fp = stdout;
+    }
+    else {
+        trace_fp = fopen(fname, "w");
+        if (trace_fp == NULL) {
+            fprintf(stderr, _("cadaver: could not open trace file `%s': %s\n"),
+                    fname, strerror(errno));
+            return 1;
+        }
+        trace_needs_close = 1;
+    }
+
+    return 0;
+}
+
+/* The message-body bit of the debug mask, put back by
+ * trace_body_restore().  Zero when it was not set to begin with. */
+static int trace_body_bit;
+
+void trace_body_suppress(void)
+{
+    trace_body_bit = ne_debug_mask & NE_DBG_HTTPBODY;
+    ne_debug_mask &= ~NE_DBG_HTTPBODY;
+}
+
+void trace_body_restore(void)
+{
+    ne_debug_mask |= trace_body_bit;
+    trace_body_bit = 0;
+}
+
+static void close_trace(void)
+{
+    if (trace_fp) {
+        fflush(trace_fp);
+        if (trace_needs_close) fclose(trace_fp);
+        trace_fp = NULL;
+        trace_needs_close = 0;
+    }
+}
+
+/* Writes `text' with every line prefixed by `prefix', so that a request
+ * and a response stay visually distinct.  Bodies are not prefixed: a
+ * PROPFIND or LOCK body is XML and nearly every line of one starts with
+ * a `<' already. */
+static void trace_block(const char *prefix, const char *text)
+{
+    const char *p = text;
+
+    while (p && *p) {
+        const char *eol = strchr(p, '\n');
+        size_t len = eol ? (size_t)(eol - p) : strlen(p);
+
+        /* Requests carry CRLF line endings; drop the CR so the trace
+         * does not end up with stray carriage returns in it. */
+        if (len > 0 && p[len - 1] == '\r') len--;
+
+        fprintf(trace_fp, "%s %.*s\n", prefix, (int)len, p);
+
+        if (!eol) break;
+        p = eol + 1;
+    }
+}
+
+/* Records the request being built, so that --json can classify a
+ * failure by method and status rather than by matching the prose in
+ * "context". */
+static void hook_create_request(ne_request *req, void *userdata,
+                                const char *method, const char *target)
+{
+    req_started(method, target);
+}
+
+/* Dumps the request line and headers, tagged with the command that
+ * issued them, so that grepping the trace for a command finds the
+ * exchange it caused. */
+static void hook_pre_send(ne_request *req, void *userdata, ne_buffer *hdr)
+{
+    fprintf(trace_fp, "\n--- %s ---\n", cmd_trace_label());
+    trace_block(">", hdr->data);
+    fflush(trace_fp);
+}
+
+static void hook_post_headers(ne_request *req, void *userdata,
+                              const ne_status *status)
+{
+    req_status(status->code);
+
+    if (trace_fp) {
+        void *cursor = NULL;
+        const char *name, *value;
+
+        fprintf(trace_fp, "< HTTP/%d.%d %d %s\n", status->major_version,
+                status->minor_version, status->code,
+                status->reason_phrase ? status->reason_phrase : "");
+
+        while ((cursor = ne_response_header_iterate(req, cursor,
+                                                    &name, &value)) != NULL)
+            fprintf(trace_fp, "< %s: %s\n", name, value);
+
+        fputs("<\n", trace_fp);
+        fflush(trace_fp);
+    }
+}
+
 static void set_proxy(const char *str)
 {
     char *hostname = ne_strdup(str), *pnt;
@@ -432,43 +609,96 @@ static void set_proxy(const char *str)
     set_option(opt_proxy, (void *)hostname);
 }
 
+/* --help and --version answer a question about the program rather than
+ * report a session, so they are plain text on standard output whatever
+ * else was asked for, and they succeed. */
+static void inform_and_exit(void (*what)(void))
+{
+    out_json = 0;
+    (*what)();
+    exit(0);
+}
+
 static void parse_args(int argc, char **argv)
 {
     static const struct option opts[] = {
-	{ "version", no_argument, NULL, 'V' },
-	{ "help", no_argument, NULL, 'h' },
-	{ "proxy", required_argument, NULL, 'p' },
-	{ "tolerant", no_argument, NULL, 't' },
-	{ "rcfile", required_argument, NULL, 'r' },
-	{ 0, 0, 0, 0 }
+        { "version", no_argument, NULL, 'V' },
+        { "help", no_argument, NULL, 'h' },
+        { "proxy", required_argument, NULL, 'p' },
+        { "tolerant", no_argument, NULL, 't' },
+        { "rcfile", required_argument, NULL, 'r' },
+        { "clobber", required_argument, NULL, 'c' },
+        { "json", no_argument, NULL, 'j' },
+        { "trace", optional_argument, NULL, 'T' },
+        { "verbose", no_argument, NULL, 'v' },
+        { 0, 0, 0, 0 }
     };
     int optc;
-    while ((optc = getopt_long(argc, argv, "ehtp:r:V", opts, NULL)) != -1) {
-	switch (optc) {
-	case 'h': usage(); exit(-1);
-	case 'V': execute_about(); exit(-1);
-	case 'p': set_proxy(optarg); break;
-	case 't': tolerant = 1; break;
-	case 'r': rcfile = ne_strdup(optarg); break;
-	case '?': 
-	default:
-	    printf(_("Try `%s --help' for more information.\n"), progname);
-	    exit(-1);
-	}
+
+    while ((optc = getopt_long(argc, argv, "htp:r:c:jT::vV", opts,
+                               NULL)) != -1) {
+        switch (optc) {
+        case 'h': inform_and_exit(usage); break;
+        case 'V': inform_and_exit(execute_about); break;
+        case 'p': set_proxy(optarg); break;
+        case 't': tolerant = 1; break;
+        case 'r': rcfile = ne_strdup(optarg); break;
+        case 'c':
+            if (set_clobber(optarg)) exit(CAD_EXIT_USAGE);
+            break;
+        case 'j':
+            if (out_set_json()) exit(CAD_EXIT_USAGE);
+            break;
+        case 'T':
+            if (open_trace(optarg)) exit(CAD_EXIT_USAGE);
+            break;
+        case 'v': verbose = 1; break;
+        case '?':
+        default:
+            fprintf(stderr, _("Try `%s --help' for more information.\n"),
+                    progname);
+            exit(CAD_EXIT_USAGE);
+        }
     }
+
+    /* Before the first request, so that a connection made from the
+     * command line is traced like everything else.  --verbose without
+     * --trace writes to standard error, which is where neon's own
+     * debugging has always gone. */
+    /* --trace turns on neon's body debugging and nothing else: the
+     * request and response headers come from the hooks below, which
+     * tag each exchange with the command that caused it, and the body
+     * is what neon alone can supply.  --verbose widens it to everything
+     * neon reports. */
+    if (verbose || trace_fp)
+        ne_debug_init(trace_fp ? trace_fp : stderr,
+                      verbose ? TRACE_MASK
+                              : (ne_debug_mask | (trace_fp ? NE_DBG_HTTPBODY
+                                                           : 0)));
+
     if (optind == (argc-1)) {
-	open_connection(argv[optind]);
+        /* The connection is a command in its own right: it is what
+         * `open URL' would have done, it can fail, and a session whose
+         * connection failed has to say so in its exit status. */
+        const char *url = argv[optind];
+
+        run_begin(url);
+        cmd_begin();
+        cmd_named("open", 1, &url);
+        open_connection(url);
+        cmd_end();
 #ifdef HAVE_ADD_HISTORY
-	{ 
-	    char *run_cmd;
-	    run_cmd = ne_concat("open ", argv[optind], NULL);
-	    add_history(run_cmd);
-	    free(run_cmd);
-	}
+        {
+            char *run_cmd = ne_concat("open ", argv[optind], NULL);
+            add_history(run_cmd);
+            free(run_cmd);
+        }
 #endif
     } else if (optind < argc) {
-	usage();
-	exit(-1);
+        usage();
+        exit(CAD_EXIT_USAGE);
+    } else {
+        run_begin(NULL);
     }
 }
 
@@ -494,68 +724,83 @@ static int execute_command(const char *line)
     const struct command *cmd;
     char **tokens;
     int n, argcount, ret = 0;
+
+    /* The record is opened before the line is parsed, because expanding
+     * a wildcard prints as it goes and that output belongs to the
+     * command which caused it. */
+    cmd_begin();
+
     tokens = parse_command(line, &argcount);
     if (argcount == 0) {
-	free(tokens);
-	return 0;
+        free(tokens);
+        cmd_discard();
+        return 0;
     }
     argcount--;
+    cmd_named(tokens[0], argcount, (const char **)&tokens[1]);
     cmd = get_command(tokens[0]);
     if (cmd == NULL) {
-	printf(_("Unrecognised command. Type 'help' for a list of commands.\n"));
+        out_printf(_("Unrecognised command. Type 'help' for a list of commands.\n"));
+        cmd_failed(_("unrecognised command"));
     } else if (argcount < cmd->min_args) {
-	printf(_("The `%s' command requires %d argument%s"),
-		tokens[0], cmd->min_args, cmd->min_args==1?"":"s");
-	if (cmd->short_help) {
-	    printf(_(":\n  %s : %s\n"), cmd->call, cmd->short_help);
-	} else {
-	    printf(".\n");
-	}
+        out_printf(_("The `%s' command requires %d argument%s"),
+                tokens[0], cmd->min_args, cmd->min_args==1?"":"s");
+        if (cmd->short_help) {
+            out_printf(_(":\n  %s : %s\n"), cmd->call, cmd->short_help);
+        } else {
+            out_printf(".\n");
+        }
+        cmd_failed(_("too few arguments"));
     } else if (argcount > cmd->max_args) {
-	if (cmd->max_args) {
-	    printf(_("The `%s' command takes at most %d argument%s"), tokens[0],
-		    cmd->max_args, cmd->max_args==1?"":"s");
-	} else {
-	    printf(_("The `%s' command takes no arguments"), tokens[0]);
-	}	    
-	if (cmd->short_help) {
-	    printf(_(":\n" "  %s : %s\n"), cmd->call, cmd->short_help);
-	} else {
-	    printf(".\n");
-	}
+        if (cmd->max_args) {
+            out_printf(_("The `%s' command takes at most %d argument%s"),
+                    tokens[0], cmd->max_args, cmd->max_args==1?"":"s");
+        } else {
+            out_printf(_("The `%s' command takes no arguments"), tokens[0]);
+        }
+        if (cmd->short_help) {
+            out_printf(_(":\n" "  %s : %s\n"), cmd->call, cmd->short_help);
+        } else {
+            out_printf(".\n");
+        }
+        cmd_failed(_("too many arguments"));
     } else if (!session.connected && cmd->needs_connection) {
-	printf(_("The `%s' command can only be used when connected to the server.\n"
-		  "Try running `open' first (see `help open' for more details).\n"), 
-		  tokens[0]);
+        out_printf(_("The `%s' command can only be used when connected to the server.\n"
+                  "Try running `open' first (see `help open' for more details).\n"),
+                  tokens[0]);
+        cmd_failed(_("not connected"));
     } else if (cmd->id == cmd_quit) {
-	ret = -1;
+        ret = -1;
     } else {
-	/* Cast away */
-	/* with a nod in the general direction of apache */
-	switch (cmd->max_args) {
-	case 0: cmd->handler.take0(); break;
-	case 1: /* tokens[1]==NULL if argcount==0 */
-	    cmd->handler.take1(tokens[1]); break; 
-	case 2: 
-	    if (argcount <=1) {
-		cmd->handler.take2(tokens[1], NULL);
-	    } else {
-		cmd->handler.take2(tokens[1], tokens[2]);
-	    }
-	    break;
-	case 3:
-	    cmd->handler.take3(tokens[1], tokens[2], tokens[3]);
-	    break;
-	case CMD_VARY:
-	    cmd->handler.takeV(argcount, (const char **) &tokens[1]);
-	default:
-	    break;
-	}
+        /* Cast away */
+        /* with a nod in the general direction of apache */
+        switch (cmd->max_args) {
+        case 0: cmd->handler.take0(); break;
+        case 1: /* tokens[1]==NULL if argcount==0 */
+            cmd->handler.take1(tokens[1]); break;
+        case 2:
+            if (argcount <=1) {
+                cmd->handler.take2(tokens[1], NULL);
+            } else {
+                cmd->handler.take2(tokens[1], tokens[2]);
+            }
+            break;
+        case 3:
+            cmd->handler.take3(tokens[1], tokens[2], tokens[3]);
+            break;
+        case CMD_VARY:
+            cmd->handler.takeV(argcount, (const char **) &tokens[1]);
+        default:
+            break;
+        }
     }
-    for (n = 0; n < argcount; n++) {
+    /* parse_command() counts the command name as a token, so there are
+     * argcount+1 of them; the last argument used to be left behind. */
+    for (n = 0; n <= argcount; n++) {
         ne_free(tokens[n]);
     }
     ne_free(tokens);
+    cmd_end();
     return ret;
 }
 
@@ -569,11 +814,16 @@ static void quit_handler(int sig)
 	signal(sig, quit_handler);
 	return;
     } else {
-	printf(_("Terminated by signal %d.\n"), sig);
+	out_printf(_("Terminated by signal %d.\n"), sig);
 	if (session.connected) {
 	    close_connection();
 	}
-	exit(-1);
+        /* The convention a shell uses for a process a signal ended,
+         * and above the range a count of failed commands can reach, so
+         * the two can never be confused.  run_finish() is not called:
+         * it is not safe from a signal handler, and a session cut short
+         * has no result to report. */
+	exit(128 + (sig & 0x7F));
     }
 }
 
@@ -601,10 +851,31 @@ static void init_netrc(void)
 #endif
 }
 
+/* Reads one line from `f', however long, with the line ending left on.
+ * Returns NULL at end of file; the result is the caller's to free.  Not
+ * fgets() into a fixed buffer: a line longer than that used to become
+ * several commands, and a rcfile line is a command. */
+static char *read_line(FILE *f)
+{
+    ne_buffer *buf = ne_buffer_create();
+    char chunk[BUFSIZ];
+
+    while (fgets(chunk, sizeof chunk, f) != NULL) {
+        ne_buffer_zappend(buf, chunk);
+        if (strchr(chunk, '\n')) break;
+    }
+
+    if (buf->used == 1) {
+        ne_buffer_destroy(buf);
+        return NULL;
+    }
+
+    return ne_buffer_finish(buf);
+}
+
 static int init_rcfile(void)
 {
     int ret = 0;
-    char buf[BUFSIZ];
     struct stat st;
     FILE *f;
 
@@ -621,17 +892,21 @@ static int init_rcfile(void)
 
     f = fopen(rcfile, "r");
     if (f == NULL) {
-        printf(_("Could not read rcfile %s: %s\n"), rcfile, 
+        out_printf(_("Could not read rcfile %s: %s\n"), rcfile,
 	   strerror(errno));
+        cmd_failed(strerror(errno));
     } else {
 	for (;;) {
-	    if (fgets(buf, BUFSIZ, f) != NULL) {
-		ret = execute_command(ne_shave(buf, "\r\n"));
-		if (ret != 0)
-		    break;
-	    } else {
-		break;
-	    }
+            char *line = read_line(f);
+
+            if (line == NULL) break;
+
+            /* ne_shave() returns a pointer within the line, so the
+             * allocation is what gets freed. */
+            ret = execute_command(ne_shave(line, "\r\n"));
+            ne_free(line);
+
+            if (ret != 0) break;
 	}
 	fclose(f);
     }
@@ -751,7 +1026,8 @@ static char **completion(const char *text, int start, int end)
     else if (sep != NULL) {
         char *cname = ne_strndup(rl_line_buffer, sep - rl_line_buffer);
         const struct command *cmd = get_command(cname);
-        enum command_scope scope = cmd ? cmd->scope : parmscope_none;
+        enum command_scope scope =
+            completion_scope(cmd, argument_index(rl_line_buffer, start));
 
         ne_free(cname);
 
@@ -780,23 +1056,28 @@ static char **completion(const char *text, int start, int end)
 
 #endif /* HAVE_LIBREADLINE */
 
+void out_state_reset(void)
+{
+    out_state = out_none;
+}
+
 void output(enum output_type t, const char *fmt, ...)
 {
     va_list params;
     if (t == o_finish) {
 	switch (out_state) {
 	case out_transfer_plain:
-	    printf("] ");
+	    out_printf("] ");
 	    break;
 	default:
-	    putchar(' ');
+	    out_putchar(' ');
 	    break;
 	}
     }
     va_start(params, fmt);
-    vfprintf(stdout, fmt, params);
+    out_vprintf(fmt, params);
     va_end(params);
-    fflush(stdout);
+    out_flush();
     switch (t) { 
     case o_start:
 	out_state = out_incommand;
@@ -818,23 +1099,30 @@ static void init_readline(void)
 #ifdef HAVE_LIBREADLINE
     rl_readline_name = "cadaver";
     rl_attempted_completion_function = completion;
+    /* readline echoes the prompt, and the line itself when the input is
+     * not a terminal, to rl_outstream.  With --json standard output
+     * carries the result document and nothing else, so a prompt goes to
+     * standard error along with everything else meant for a person. */
+    if (out_json) rl_outstream = stderr;
 #endif /* HAVE_LIBREADLINE */
 }
 
 #ifndef HAVE_LIBREADLINE
 char *readline(const char *prompt)
 {
-    static char buf[256];
-    char *ret;
+    char *line, *ret;
+
     if (prompt) {
-	printf("%s", prompt);
+	out_printf("%s", prompt);
     }
-    ret = fgets(buf, 256, stdin);
-    if (ret) {
-	return ne_strdup(ne_shave(buf, "\r\n"));
-    } else {
-	return NULL;
-    }
+
+    line = read_line(stdin);
+    if (line == NULL) return NULL;
+
+    ret = ne_strdup(ne_shave(line, "\r\n"));
+    ne_free(line);
+
+    return ret;
 }
 #endif
 
@@ -906,7 +1194,7 @@ int main(int argc, char *argv[])
     home = cad_home_dir();
     if (!home) {
 	/* Show me the way to go home... */
-	printf(_("Could not determine the home directory; "
+	out_printf(_("Could not determine the home directory; "
 		 "set $HOME and try again.\n"));
 	return -1;
     }
@@ -937,7 +1225,7 @@ int main(int argc, char *argv[])
 	if (cmd == NULL) {
 	    /* Is it safe to do this... they just closed stdin, so
 	     * is it bad to write to stdout? */
-	    putchar('\n');
+	    out_putchar('\n');
 	    ret = 1;
 	} else {
 #ifdef HAVE_ADD_HISTORY
@@ -956,7 +1244,10 @@ int main(int argc, char *argv[])
 
     ne_sock_exit();
 
-    return 0;
+    ret = run_finish();
+    close_trace();
+
+    return ret;
 }
 
 static void notifier(void *ud, ne_session_status status, const ne_session_status_info *info)
@@ -965,23 +1256,28 @@ static void notifier(void *ud, ne_session_status status, const ne_session_status
 
     if (in_completion) return; /* do nothing during tab-completion */
 
+    /* The dots and the progress bar are for someone watching a slow
+     * transfer happen.  With --json there is nobody watching and the
+     * result document has no use for a line of dots. */
+    if (out_json) return;
+
     switch (out_state) {
     case out_none:
         if (quiet) break;
 
 	switch (status) {
 	case ne_status_lookup:
-	    printf(_("Looking up hostname... "));
+	    out_printf(_("Looking up hostname... "));
 	    break;
 	case ne_status_connecting:
-	    printf(_("Connecting to server... "));
+	    out_printf(_("Connecting to server... "));
 	    break;
 	case ne_status_connected:
-	    printf(_("connected.\n"));
+	    out_printf(_("connected.\n"));
 	    break;
 #if NE_MINIMUM_VERSION(0, 35)
         case ne_status_handshake:
-            printf(_("TLS handshake completed: protocol version %s, cipher %s\n"),
+            out_printf(_("TLS handshake completed: protocol version %s, cipher %s\n"),
                    ne_ssl_proto_name(info->hs.protocol),
                    info->hs.ciphersuite ? info->hs.ciphersuite : _("unknown"));
             break;
@@ -996,11 +1292,11 @@ static void notifier(void *ud, ne_session_status status, const ne_session_status
     case out_transfer_done:
 	switch (status) {
 	case ne_status_connecting:
-            if (!quiet) printf(_(" (reconnecting..."));
+            if (!quiet) out_printf(_(" (reconnecting..."));
             /* FIXME: should reset out_state here if transfer_done */
 	    break;
 	case ne_status_connected:
-	    if (!quiet) printf(_("done)"));
+	    if (!quiet) out_printf(_("done)"));
 	    break;
         case ne_status_recving:
         case ne_status_sending:
@@ -1011,11 +1307,11 @@ static void notifier(void *ud, ne_session_status status, const ne_session_status
                     && status == ne_status_sending)) {
                 if (isatty(STDOUT_FILENO) && info->sr.total > 0) {
                     out_state = out_transfer_pretty;
-                    putchar('\n');
+                    out_putchar('\n');
                     pretty_progress_bar(info->sr.progress, info->sr.total);
                 } else {
                     out_state = out_transfer_plain;
-                    printf(" [.");
+                    out_printf(" [.");
                 }
             }
             break;                
@@ -1026,15 +1322,15 @@ static void notifier(void *ud, ne_session_status status, const ne_session_status
     case out_transfer_plain:
 	switch (status) {
 	case ne_status_connecting:
-	    printf(_("] reconnecting: "));
+	    out_printf(_("] reconnecting: "));
 	    break;
 	case ne_status_connected:
-	    printf(_("okay ["));
+	    out_printf(_("okay ["));
 	    break;
         case ne_status_sending:
         case ne_status_recving:
-            putchar('.');
-            fflush(stdout);
+            out_putchar('.');
+            out_flush();
             if (info->sr.progress == info->sr.total) {
                 out_state = out_transfer_done;
             }
@@ -1047,12 +1343,12 @@ static void notifier(void *ud, ne_session_status status, const ne_session_status
 	switch (status) {
 	case ne_status_connecting:
 	    if (!quiet) {
-                putchar('\r');
-                printf(_("Transfer timed out, reconnecting... "));
+                out_putchar('\r');
+                out_printf(_("Transfer timed out, reconnecting... "));
             }
 	    break;
 	case ne_status_connected:
-	    if (!quiet) printf(_("okay."));
+	    if (!quiet) out_printf(_("okay."));
 	    break;
         case ne_status_recving:
         case ne_status_sending:
@@ -1065,7 +1361,7 @@ static void notifier(void *ud, ne_session_status status, const ne_session_status
 	}
 	break;	
     }
-    fflush(stdout);
+    out_flush();
 }
 
 /* From ncftp.
@@ -1111,74 +1407,96 @@ static void pretty_progress_bar(ne_off_t progress, ne_off_t total)
 	pc = (double)progress / total;
     }
     len = pc * 30;
-    putchar('\r');
-    printf(_("Progress: ["));
+    out_putchar('\r');
+    out_printf(_("Progress: ["));
     for (n = 0; n<30; n++) {
-	putchar((n<len-1)?'=':
+	out_putchar((n<len-1)?'=':
 		 (n==(len-1)?'>':' '));
     }
-    printf(_("] %5.1f%% of %" NE_FMT_NE_OFF_T " bytes"), pc*100, total);
-    fflush(stdout);
+    out_printf(_("] %5.1f%% of %" NE_FMT_NE_OFF_T " bytes"), pc*100, total);
+    out_flush();
 }
 
+/* Asks for the credentials the .netrc did not supply.  `known_user' and
+ * `known_pass' are what it did, either or both NULL. */
 static int supply_creds(const char *prompt, const char *realm, const char *hostname,
-			char *username, char *password)
+			char *username, char *password,
+                        const char *known_user, const char *known_pass)
 {
     char *tmp;
 
     switch (out_state) {
     case out_transfer_pretty:
     case out_transfer_done:
-	putchar('\n');
+	out_putchar('\n');
         break;
     case out_none:
 	break;
     case out_incommand:
     case out_transfer_upload:
     case out_transfer_download:
-	putchar(' ');
+	out_putchar(' ');
 	break;
     case out_transfer_plain:
-	printf("] ");
+	out_printf("] ");
 	break;
     }
-    printf(prompt, realm, hostname);
-    
-    tmp = readline(_("Username: "));
-    if (tmp == NULL) {
-	putchar('\r'); printf(_("Authentication aborted!\n"));
-	return -1;
-    } else if (strlen(tmp) >= NE_ABUFSIZ) {
-	putchar('\r'); printf(_("Username too long (>%d)\n"), NE_ABUFSIZ);
-	free(tmp);
-	return -1;
+    out_printf(prompt, realm, hostname);
+
+    if (known_user) {
+        if (strlen(known_user) >= NE_ABUFSIZ) {
+            out_printf(_("Username too long (>%d)\n"), NE_ABUFSIZ);
+            return -1;
+        }
+        strcpy(username, known_user);
+        out_printf(_("Username: %s\n"), known_user);
+    }
+    else {
+        tmp = readline(_("Username: "));
+        if (tmp == NULL) {
+            out_putchar('\r'); out_printf(_("Authentication aborted!\n"));
+            return -1;
+        } else if (strlen(tmp) >= NE_ABUFSIZ) {
+            out_putchar('\r'); out_printf(_("Username too long (>%d)\n"), NE_ABUFSIZ);
+            free(tmp);
+            return -1;
+        }
+
+        strcpy(username, tmp);
+        free(tmp);
     }
 
-    strcpy(username, tmp);
-    free(tmp);
-
-    tmp = fm_getpassword(_("Password: "));
-    if (tmp == NULL) {
-	printf(_("Authentication aborted!\n"));
-	return -1;
-    } else if (strlen(tmp) >= NE_ABUFSIZ) {
-	putchar('\r'); printf(_("Password too long (>%d)\n"), NE_ABUFSIZ);
-	return -1;
+    if (known_pass) {
+        if (strlen(known_pass) >= NE_ABUFSIZ) {
+            out_printf(_("Password too long (>%d)\n"), NE_ABUFSIZ);
+            return -1;
+        }
+        strcpy(password, known_pass);
     }
-    
-    strcpy(password, tmp);
+    else {
+        tmp = fm_getpassword(_("Password: "));
+        if (tmp == NULL) {
+            out_printf(_("Authentication aborted!\n"));
+            return -1;
+        } else if (strlen(tmp) >= NE_ABUFSIZ) {
+            out_putchar('\r'); out_printf(_("Password too long (>%d)\n"), NE_ABUFSIZ);
+            return -1;
+        }
+
+        strcpy(password, tmp);
+    }
 	
     switch (out_state) {
     case out_transfer_download:
     case out_transfer_upload:
     case out_transfer_done:
     case out_incommand:
-	printf(_("Retrying:"));
-	fflush(stdout);
+	out_printf(_("Retrying:"));
+	out_flush();
 	break;
     case out_transfer_plain:
-	printf(_("Retrying ["));
-	fflush(stdout);
+	out_printf(_("Retrying ["));
+	out_flush();
 	break;
     default:
 	break;
@@ -1189,19 +1507,26 @@ static int supply_creds(const char *prompt, const char *realm, const char *hostn
 static int supply_creds_server(void *userdata, const char *realm, int attempt,
 			       char *username, char *password)
 {
-    /* Try netrc creds if we have them on first auth attempt. */
-    if (server_username && server_password && attempt-- == 0) {
+    int from_netrc = server_username != NULL || server_password != NULL;
+
+    /* A complete .netrc entry answers the first attempt without a
+     * prompt.  A partial one fills in what it has and the prompt below
+     * asks for the rest. */
+    if (attempt == 0 && server_username && server_password) {
 	ne_strnzcpy(username, server_username, NE_ABUFSIZ);
 	ne_strnzcpy(password, server_password, NE_ABUFSIZ);
 	return 0;
     }
 
-    if (attempt > 1)
+    /* Two prompts, plus the .netrc attempt where there was one. */
+    if (attempt > (from_netrc ? 2 : 1))
 	return -1;
 
     return supply_creds(
 	_("Authentication required for %s on server `%s':\n"), realm,
-	session.uri.host, username, password);
+	session.uri.host, username, password,
+        attempt == 0 ? server_username : NULL,
+        attempt == 0 ? server_password : NULL);
 }
 
 static int supply_creds_proxy(void *userdata, const char *realm, int attempt,
@@ -1212,6 +1537,6 @@ static int supply_creds_proxy(void *userdata, const char *realm, int attempt,
 
     return supply_creds(
 	_("Authentication required for %s on proxy server `%s':\n"), realm,
-	proxy_hostname, username, password);
+	proxy_hostname, username, password, NULL, NULL);
 }
 

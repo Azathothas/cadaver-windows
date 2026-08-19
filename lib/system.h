@@ -117,6 +117,17 @@ struct cad_finfo {
 /* Fills in `info' for `path'.  Returns zero, or -1 with errno set. */
 int cad_file_info(const char *path, struct cad_finfo *info);
 
+/* Truncates the open file `fd' to `length' bytes.  Returns zero, or -1
+ * with errno set.  Separate because Windows spells it _chsize_s() and
+ * takes the length as a 64-bit integer of its own. */
+int cad_truncate(int fd, ne_off_t length);
+
+/* Renames `from' to `to', replacing `to' if it is there.  Returns zero,
+ * or -1 with errno set.  Separate because the C runtime's rename() on
+ * Windows fails with EEXIST rather than replacing, which would make
+ * every download to an existing name fail at the last step. */
+int cad_rename_over(const char *from, const char *to);
+
 /* Quotes `path' for the platform's command interpreter and appends it
  * to `cmd', returning a newly allocated command line.  Used to build
  * the editor invocation, where the temporary file's directory routinely

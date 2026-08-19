@@ -146,35 +146,29 @@ parse_netrc (const char *file)
 
 	    tok = pp = p;
 
-	    /* Find the end of the token. */
-	    while (*p && (quote_char || !isspace ((unsigned)*p)))
+	    /* Find the end of the token.  A quote quotes only when it
+	       opens the token; inside one it is an ordinary character.
+	       The loop this replaces began a quoted run wherever it met
+	       a quote, so a randomly generated password with an
+	       apostrophe in the middle of it silently lost that
+	       character and authentication failed with no indication
+	       why -- upstream issue #75.  There is no escape in the
+	       format, so a value that has to *begin* with a quote
+	       character cannot be spelled; nothing else is affected. */
+	    if (*p == '"' || *p == '\'')
 	    {
-		if (quote_char)
-		{
-		    if (quote_char == *p)
-		    {
-			quote_char = 0;
-			p ++;
-		    }
-		    else
-		    {
-			*pp = *p;
-			p ++;
-			pp ++;
-		    }
-		}
-		else
-		{
-		    if (*p == '"' || *p == '\'')
-			quote_char = *p;
-		    else
-		    {
-			*pp = *p;
-			pp ++;
-		    }
+		quote_char = *p ++;
+
+		while (*p && *p != quote_char)
+		    *pp ++ = *p ++;
+
+		if (*p == quote_char)
 		    p ++;
-		}
 	    }
+
+	    while (*p && !isspace ((unsigned)*p))
+		*pp ++ = *p ++;
+
 	    /* Null-terminate the token, if it isn't already. */
 	    if (*p)
 		*p ++ = '\0';
@@ -304,22 +298,35 @@ parse_netrc (const char *file)
 netrc_entry *
 search_netrc (netrc_entry *list, const char *host)
 {
-    /* Look for the HOST in LIST. */
+    netrc_entry *deflt = NULL;
+
+    /* Look for the HOST in LIST.  The whole list is scanned even after
+       a default entry is found, because a default that happened to be
+       written above a named one used to shadow it: cadaver then
+       authenticated as somebody else, with no indication that the entry
+       it was asked to use had been passed over.  ftp(1) expects the
+       default to be last in the file; not depending on that is free.
+
+       The comparison ignores case, because host names do: a .netrc
+       written with the name capitalised the way the site writes it
+       would otherwise supply nothing at all. */
     while (list)
     {
 	if (!list->host)
-	    /* We hit the default entry. */
-	    break;
-
-	else if (!strcmp (list->host, host))
+	{
+	    /* Remember the first default, in case nothing is named. */
+	    if (!deflt)
+		deflt = list;
+	}
+	else if (!strcasecmp (list->host, host))
 	    /* We found a matching entry. */
-	    break;
+	    return list;
 
 	list = list->next;
     }
 
-    /* Return the matching entry, or NULL. */
-    return list;
+    /* Return the default entry, or NULL. */
+    return deflt;
 }
 
 

@@ -1,0 +1,9 @@
+# A .netrc that supplies the login and not the password, which upstream
+# issue #25 is about: the entry used to be ignored altogether and both
+# were asked for.  The password comes from standard input, which is
+# where a prompt reads it when the input is not a terminal.
+lcd @WORK@
+put hello.txt
+ls
+delete hello.txt
+quit

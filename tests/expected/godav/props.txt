@@ -13,13 +13,13 @@ Fetching properties for `hello.txt':
 • DAV:resourcetype = 
 • DAV:supportedlock = <DAV:lockentry xmlns:D='DAV:'><DAV:lockscope><DAV:exclusive></DAV:exclusive></DAV:lockscope><DAV:locktype><DAV:write></DAV:write></DAV:locktype></DAV:lockentry>
 Fetching property names for hello.txt:
- DAV:displayname
- DAV:getcontentlength
- DAV:getcontenttype
- DAV:getetag
- DAV:getlastmodified
- DAV:resourcetype
- DAV:supportedlock
+• DAV:displayname
+• DAV:getcontentlength
+• DAV:getcontenttype
+• DAV:getetag
+• DAV:getlastmodified
+• DAV:resourcetype
+• DAV:supportedlock
 Setting property on `hello.txt': failed:
 /props/props/hello.txt: 403 Forbidden
 Fetching properties for `hello.txt':
@@ -34,3 +34,4 @@ Fetching properties for `hello.txt':
 Could not fetch property: 404 Not Found
 Deleting collection `/props/props/': succeeded.
 Connection to `127.0.0.1' closed.
+-- cadaver exited 8 --

@@ -1,0 +1,30 @@
+# The --json document.  Every kind of command that contributes something
+# to it is here: an outcome, a listing, properties, headers, a lock, a
+# path, and both shapes of failure -- one from a request and one from a
+# refusal that never made one.  The transcript is the document itself,
+# pretty-printed by tests/normalise.py, which also fails the session
+# outright if it is not well-formed JSON.
+lcd @WORK@
+mkcol js
+cd js
+pwd
+lpwd
+put hello.txt
+put second.txt
+ls
+head hello.txt
+propget hello.txt
+delete nosuchresource
+rmcol hello.txt
+mput hello.txt second.txt
+# The three commands --json refuses, because each writes a byte stream
+# to standard output or runs a program that might.
+cat hello.txt
+less hello.txt
+edit hello.txt
+lock hello.txt
+showlocks
+unlock hello.txt
+cd ..
+rmcol js
+quit

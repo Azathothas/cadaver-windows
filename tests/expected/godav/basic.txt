@@ -8,6 +8,7 @@ Listing collection `/basic/coll/': succeeded.
 hello from cadaver
 line two
 Downloading `hello.txt' to `fetched.txt': [.. succeeded.
+Fetching headers for `hello.txt': succeeded.
 Response status-code 200, headers:
 • accept-ranges: bytes
 • content-length: 28
@@ -20,3 +21,4 @@ Listing collection `/basic/coll/': collection is empty.
 Deleting collection `/basic/coll/': succeeded.
 Listing collection `/basic/': collection is empty.
 Connection to `127.0.0.1' closed.
+-- cadaver exited 0 --

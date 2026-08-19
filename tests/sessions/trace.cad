@@ -1,0 +1,11 @@
+# The --trace dump.  What it wrote is checked by trace.check rather
+# than by this transcript, because the trace goes to a file.
+lcd @WORK@
+mkcol traced
+cd traced
+put hello.txt
+ls
+delete hello.txt
+cd ..
+rmcol traced
+quit

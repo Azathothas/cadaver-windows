@@ -19,6 +19,7 @@ Options:
      searchorder: unset
     searchdorder: unset
            debug: {}
+         clobber: ask
        lockscope: exclusive
        lockdepth: infinite
      searchdepth: infinity
@@ -45,6 +46,7 @@ Options:
      searchorder: unset
     searchdorder: unset
            debug: {}
+         clobber: ask
        lockscope: shared
        lockdepth: zero
      searchdepth: infinity
@@ -69,6 +71,7 @@ Options:
      searchorder: unset
     searchdorder: unset
            debug: {}
+         clobber: ask
        lockscope: exclusive
        lockdepth: infinite
      searchdepth: infinity
@@ -91,3 +94,4 @@ neon <VERSION>
 readline <VERSION>
 Current collection is `http://127.0.0.1:<PORT>/options/'.
 Connection to `127.0.0.1' closed.
+-- cadaver exited 3 --

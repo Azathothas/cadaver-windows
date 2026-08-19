@@ -8,11 +8,11 @@ file is about using the tool.
 The short version:
 
 1. Get a binary (below), or build one.
-2. Put the commands in a file and run `cadaver -r FILE URL`, or pipe
-   them in.
-3. **Read the output.** cadaver's exit status is 0 whether the commands
-   worked or not, so the transcript is the only thing that tells you.
-4. When something looks wrong at the protocol level, `set debug http`.
+2. Put the commands in a file and run `cadaver --json -r FILE URL`.
+3. **Branch on the exit status**: 0 means every command succeeded, and
+   anything else is the number that did not.
+4. Read `--json` for the detail, not the transcript.
+5. When something looks wrong at the protocol level, `--trace`.
 
 If all you need is one `PUT` or one `GET` with no authentication
 subtleties, `curl -T` and `curl -o` are simpler. cadaver earns its
@@ -119,62 +119,264 @@ redirect round trip on some servers.
 
 ## Reading the result
 
-**A session always exits 0.** Not "0 unless something failed" — always,
-including when every command in it failed, and including when the
-connection was refused. Do not branch on it. This is inherited from
-upstream and is the single most important thing to know before
-scripting cadaver; it is [recorded in TODO](TODO) as the first thing to
-change.
+### The exit status
 
-`--help`, `--version` and a usage error are the other way round: they
-exit -1, which Windows reports as 4294967295 and a POSIX shell as 127
-or 255. So `cadaver --version` looks like a failure to a script with
-`set -e` in it even though it printed what you asked for.
+**0 means every command succeeded.** Anything else is the number that
+did not, capped at 125 so that it can never be read as a shell's
+signalled exit:
 
-What you have instead is the transcript, which is regular:
+```bash
+./cadaver.exe -r commands.txt https://dav.example.com/path/ < /dev/null
+case $? in
+    0) echo "all of it worked" ;;
+    *) echo "$? commands failed" ;;
+esac
+```
+
+A command fails when the server refused it, when the connection could
+not be made, when it was given arguments it cannot use, or when it
+refused to act — `rmcol` on a plain resource, `delete` on a collection.
+The connection cadaver makes from the command line counts as a command
+of its own, so a session that could not connect exits non-zero even
+though it ran nothing.
+
+Two statuses are not a count:
+
+* **2 from a command line that could not be understood** — an unknown
+  option, more than one URL, a `--clobber` value that is not one of the
+  three. Nothing was executed, which is what tells it apart from two
+  failed commands.
+* **0 from `--help` and `--version`**, which answer a question about
+  the program rather than run a session. They write plain text to
+  standard output even under `--json`.
+
+### `--json`
+
+`--json` writes one JSON object to standard output and nothing else.
+Everything a person would have read goes into that object, so nothing
+is lost; a prompt, and a trace with no file named, go to standard
+error.
+
+```bash
+./cadaver.exe --json -r commands.txt https://dav.example.com/path/ \
+    < /dev/null > result.json
+```
+
+```json
+{
+  "tool": "cadaver",
+  "version": "0.28-win2",
+  "target": "http://127.0.0.1:8931/",
+  "started": "2026-08-19T07:35:16.974Z",
+  "duration": 0.004,
+  "commands": [
+    {"command": "open", "args": ["http://127.0.0.1:8931/"],
+     "target": null, "status": "ok", "duration": 0.002, "output": []},
+    {"command": "put", "args": ["f.txt"], "target": "/f.txt",
+     "status": "ok", "duration": 0.001,
+     "output": ["Uploading f.txt to `/f.txt': succeeded."]},
+    {"command": "delete", "args": ["nosuch"], "target": "/nosuch",
+     "status": "failed", "duration": 0.000,
+     "context": "404 Not Found",
+     "error": {"op": "DELETE", "path": "/nosuch", "status": 404},
+     "output": ["Deleting `/nosuch': failed:", "404 Not Found"]}
+  ],
+  "summary": {"total": 5, "ok": 4, "failed": 1}
+}
+```
+
+The run:
+
+| Field | Notes |
+| --- | --- |
+| `tool` | Always `"cadaver"`. |
+| `version` | The fork version, the same string `--version` prints. |
+| `target` | The URL given on the command line, or `null` when cadaver was started without one. |
+| `started` | When the run began, ISO 8601 in UTC with millisecond precision, always suffixed `Z`. Truncated rather than rounded, so it never names a moment that had not happened yet. `null` if the clock could not be read. |
+| `duration` | Seconds, to millisecond resolution. Wall-clock, so it includes server and network time. |
+| `commands` | Every command line that was executed, in order, including the `open` for the URL on the command line. A blank line or a comment produces nothing. |
+| `output` | Present only when something was printed between commands — the connection banner, the closing message. |
+| `summary` | `total`, `ok` and `failed`. `ok + failed` equals `total`. |
+
+Each command:
+
+| Field | Notes |
+| --- | --- |
+| `command` | The command as typed, so an alias appears as the alias: `rm`, not `delete`. |
+| `args` | Its arguments, after wildcard expansion. Always present, possibly empty. |
+| `status` | `"ok"` or `"failed"`, and nothing else. The set is closed. |
+| `duration` | Seconds, to millisecond resolution, wall-clock. |
+| `target` | The request target of the last request the command made, exactly as it went on the wire. `null` when it made none — `lpwd`, `set`, or a command that refused before asking. |
+| `context` | Why it failed. Absent when it did not. Prose, and not a stable interface: branch on `error`. |
+| `error` | Machine-readable classification of the failure. See below. |
+| `operations` | Present only on a command that performed more than one — `mput`, `mget`, `copy` with several sources. See below. |
+| `output` | What the command printed, one array element per line, with the line endings removed. Always present. |
+
+and, for the commands that produce data rather than only an outcome:
+
+| Field | On | Notes |
+| --- | --- | --- |
+| `listing` | `ls` | One object per member: `name`, `href`, `type` (`collection`, `resource`, `reference` or `error`), and then either `size`, `modified` and `executable`, or `status` and `reason` for a member the server could not report on. `modified` is ISO 8601 in UTC, or `null` where the server gave none. |
+| `properties` | `propget`, `propnames` | `namespace`, `name`, and `value` — `null` for `propnames`, which asks for the names alone. |
+| `headers` | `head` | The response headers, as an object. |
+| `http_status` | `head` | The response status, as an integer. |
+| `locks` | `lock`, `discover`, `steal`, `showlocks` | `token`, `href`, `scope`, `depth` (`0`, `1` or `"infinity"`), `timeout` in seconds or `null`, and `owner`. |
+| `path` | `pwd`, `lpwd` | The path the command was asked to report. |
+| `options` | `set` with no argument | Every option and its value, as an object. |
+
+### Classifying a failure
+
+`context` is prose. To branch on the kind of failure without matching
+strings, read `error`:
+
+```json
+"error": {"op": "DELETE", "path": "/nosuch", "status": 404}
+```
+
+| Field | Notes |
+| --- | --- |
+| `error` | Present only on a command whose `status` is `"failed"`, and only if it got as far as sending a request. A command that refused before asking — `rmcol` on a plain resource, an argument that was wrong — has none. |
+| `error.op` | The HTTP method, as sent. `OPTIONS`, `GET`, `HEAD`, `PUT`, `DELETE`, `MKCOL`, `COPY`, `MOVE`, `PROPFIND`, `PROPPATCH`, `LOCK`, `UNLOCK`, and the DeltaV and DASL methods for the commands that use them. |
+| `error.path` | The request target exactly as it went on the wire: an absolute path, escaped. |
+| `error.status` | The response status as an integer, or `null` when no response arrived at all — a refused connection, a timeout, a TLS failure. `null` and a missing `error` mean different things: `null` means cadaver asked and got nothing back. |
+
+Two consequences worth knowing. A command resolves a path with a
+`PROPFIND` before doing anything with it, so `error.op` is the method
+of the *last* request, which is the one the failure is about. And a
+redirect or an authentication challenge is retried by neon on the same
+request, so `status` is the final response rather than the intermediate
+one.
+
+```python
+if c["status"] == "failed":
+    err = c.get("error")
+    if err is None:
+        kind = "no request made"        # read c["context"]
+    elif err["status"] is None:
+        kind = "transport"              # never reached the server
+    else:
+        kind = "%s -> %d" % (err["op"], err["status"])
+```
+
+### Commands that do several things
+
+`mput a b c` performs one operation per file. The command object then
+carries an `operations` array, one entry per operation, each with its
+own `target`, `status`, `duration`, `context` and `error`:
+
+```json
+{"command": "mput", "args": ["a.txt", "b.txt"], "target": "/dav/b.txt",
+ "status": "failed", "duration": 0.126,
+ "context": "403 Forbidden",
+ "error": {"op": "PUT", "path": "/dav/b.txt", "status": 403},
+ "operations": [
+   {"target": "/dav/a.txt", "status": "ok", "duration": 0.062},
+   {"target": "/dav/b.txt", "status": "failed", "duration": 0.063,
+    "context": "403 Forbidden",
+    "error": {"op": "PUT", "path": "/dav/b.txt", "status": 403}}]}
+```
+
+`operations` is absent when the command performed at most one, so a
+consumer that ignores it still branches correctly: the command's own
+`target`, `context` and `error` describe **the first operation that
+failed**, or the last one if none did.
+
+### Three commands `--json` refuses
+
+`cat` writes the resource to standard output, `less` runs a pager that
+writes there too, and `edit` runs a program that might. Under `--json`
+standard output carries the result document, so all three are refused
+and recorded as failed commands saying so. Use `get` and `put`.
+
+### A minimal consumer
+
+```python
+import json, subprocess
+
+p = subprocess.run(["./cadaver.exe", "--json", "-r", "commands.txt", url],
+                   stdin=subprocess.DEVNULL, capture_output=True, text=True)
+result = json.loads(p.stdout)
+
+for c in result["commands"]:
+    if c["status"] == "failed":
+        print(c["command"], c["args"], "->", c.get("context"))
+
+# The exit status says the same thing without parsing anything.
+assert p.returncode == result["summary"]["failed"]
+```
+
+### Without `--json`
+
+The transcript is regular enough to read, and is what a person sees:
 
 | Ending | Meaning |
 | --- | --- |
 | `succeeded.` | The command worked. |
 | `failed:` followed by a line | It did not. The next line is the reason, usually an HTTP status and phrase. |
 | `collection is empty.` | `ls` on a collection with no members. |
+| `the server reported no locks.` | `discover` or `steal` on a resource the server said holds none. |
 | `authentication failed.` | Credentials were wrong or absent. |
 | `could not connect to server.` | Nothing answered. |
 | `connection timed out.` | Something answered and then stopped. |
 | `redirect to URL` | The server redirected and cadaver did not follow it. |
 
-So a session is clean if no line ends `failed:` and none of the other
-failure endings appear. In Python:
+Match on the ending rather than on the whole line: the part before it
+names the command and the resource and is not a fixed string. Anything
+else cadaver prints is the answer to a command that produces output —
+`ls`, `cat`, `propget`, `head`, `showlocks` — and its format is per
+command. Prefer `--json`, where all of it is a field.
 
-```python
-import subprocess
+## Seeing what actually happened
 
-FAILED = ("failed:", "authentication failed.", "could not connect to server.",
-          "connection timed out.")
+`--trace` is the flag that matters when a command fails and you do not
+know why. It dumps every request and response, tagged with the command
+that issued it:
 
-def run(script, url):
-    p = subprocess.run(["./cadaver.exe", "-r", script, url],
-                       stdin=subprocess.DEVNULL,
-                       capture_output=True, text=True)
-    lines = p.stdout.splitlines()
-    bad = [n for n, line in enumerate(lines)
-           if line.rstrip().endswith(FAILED)]
-    return lines, bad
-
-lines, bad = run("commands.txt", "http://127.0.0.1:8080/dav/")
-for n in bad:
-    # The failure line, and the reason on the line after it.
-    print("\n".join(lines[n:n + 2]))
+```bash
+./cadaver.exe --json --trace=wire.log -r commands.txt URL > result.json
 ```
 
-Match on the ending rather than on the whole line: the part before it
-names the command and the resource and is not a fixed string.
+Sent lines are prefixed `>`, received lines `<`. Bodies are printed in
+square brackets rather than prefixed, because a `PROPFIND` or `LOCK`
+body is XML and nearly every line of one starts with a `<`:
 
-Anything cadaver prints that is not one of those endings is the answer
-to a command that produces output — `ls`, `cat`, `propget`, `head`,
-`showlocks` — and its format is per command. `cat` writes the resource
-itself, unmodified and in binary, so a session that ends in `cat` is a
-usable way to fetch a file to standard output.
+```
+--- 5 (put hello.txt) ---
+> PUT /dav/hello.txt HTTP/1.1
+> User-Agent: cadaver/0.28-win2 neon/0.37.1
+> Connection: TE
+> TE: trailers
+> Host: 127.0.0.1:8907
+> Content-Length: 28
+< HTTP/1.1 201 Created
+< content-length: 0
+<
+```
+
+With no filename it goes to standard error. Use `-` for standard
+output, which `--json` then refuses to share — that combination is a
+usage error rather than a corrupted document.
+
+The number in the header is the command's position in the session,
+counting the `open` for the URL on the command line as the first, and
+the text after it is the command as typed. To find the exchange behind
+a failure, grep for it:
+
+```bash
+grep -A 30 "(put hello.txt)" wire.log
+```
+
+**The body of a transfer is not traced.** A `put`, `get`, `mput`,
+`mget`, `cat` or `edit` moves the resource itself, which is not a
+protocol document and may be very large; its headers and its outcome
+are traced and its bytes are not. Every other body is.
+
+`--verbose` widens the trace to everything neon reports, including
+socket, TLS, XML parser and authentication detail. Reach for it when
+the problem looks like a connection, a handshake or an authentication
+exchange rather than a protocol one. It deliberately leaves out the
+credentials in the clear; `set debug cleartext` is how you ask for
+those, and the output should not be pasted anywhere.
 
 ## Commands worth knowing about
 
@@ -182,31 +384,45 @@ usable way to fetch a file to standard output.
 connection. The whole set is in [README.md](README.md). These are the
 ones whose behaviour is worth knowing before you script them.
 
-### `get` prompts when the local file exists
+### `get` asks before overwriting, unless told what to do
 
+By default a `get` whose local file already exists prompts for another
+name. In a script that reads end of input and the command fails, having
+downloaded nothing — which is a clear answer, but rarely the one you
+want. Say which you want instead:
+
+```bash
+./cadaver.exe --clobber=yes -r commands.txt URL   # overwrite it
+./cadaver.exe --clobber=no  -r commands.txt URL   # fail, keep the file
 ```
-dav:/dav/> get report.pdf
-Enter local filename for `report.pdf': 
-```
 
-With standard input at end of file that reads nothing and prints
-`cancelled.`, so a script silently downloads nothing. Either name a
-destination that does not exist, or delete it first. `get remote local`
-takes the same path — the prompt is about the *local* file existing, not
-about the remote name.
+or `set clobber yes` inside a session. The three values are `ask`,
+which is the default, `yes` and `no`.
 
-Worse, a `get` that fails leaves a zero-length local file behind,
-because the file is created before the request is made. The next `get`
-then finds it and prompts. If a download failed, remove the local file
-before retrying.
+A `get` that fails leaves the local file exactly as it found it. The
+download goes to a temporary name beside the destination and is renamed
+over it once the whole body has arrived, so neither a truncated file nor
+an empty one is left behind — which used to happen, and then made every
+retry prompt for a name instead of downloading.
 
 ### `resumeget` needs the local file to exist
 
 It sends a `Range` request from the current local size and appends. If
-the file is not there it reports so and does nothing. If the server
-ignores `Range` and answers 200 with the whole body, cadaver reports an
-error, but the body has already been appended: **check the size after a
-failed `resumeget` rather than trusting the file.**
+the file is not there it reports so and does nothing.
+
+A server that ignores `Range` and answers 200 with the whole resource
+would append a second complete copy: neon checks the status only after
+the body has gone to the file. cadaver records the size before the
+request and truncates back to it when the request fails, so the file is
+left where it started. If the truncation itself fails it says so, and
+that is the one case where the file needs checking.
+
+### `mput` on a directory
+
+`mput *` matches directories as well as files. Each one is reported as
+a failure naming what it is; there is no recursive upload yet. It used
+to report "Could not open file: Permission denied", which was true of
+neither.
 
 ### `delete` and `rmcol` are not interchangeable
 
@@ -219,7 +435,12 @@ collection and everything in it, with no confirmation.
 `copy src... dest`: with more than two arguments, or with a destination
 that is a collection, each source is copied *into* the destination. A
 collection source into a collection destination lands as a subcollection
-of it. A collection source with a plain destination is refused.
+of it.
+
+A collection source with a destination that **exists and is not a
+collection** is refused. A destination that does not exist yet is a
+rename, and works: `move reports reports-2026` renames the collection.
+
 `rename src dest` is a `MOVE` with `Overwrite: F` and ignores the
 `overwrite` option.
 
@@ -263,17 +484,21 @@ Three ways, in the order cadaver tries them:
    password s3cret
    ```
 
-   Both lines are needed: an entry with a `login` and no `password` is
-   ignored entirely and you get the prompt for both. A `default` entry
-   with no `machine` matches any host, and is looked at only after the
-   named ones.
+   An entry with a `login` and no `password` supplies the login, and
+   only the password is asked for. A `default` entry with no `machine`
+   matches any host, and is used only when no named entry does.
 
-   Two things about the parser to know before you generate a `.netrc`
-   from somewhere else. A quote character anywhere in a value is
-   removed, so a password containing `"` or `'` is silently mangled and
-   authentication fails with no indication why. And the file's
-   permissions are not checked, so restricting them is your
-   responsibility. Both are [in TODO](TODO).
+   A quote only quotes when it opens a value, which is how a value
+   containing a space is written; inside one it is an ordinary
+   character, so a generated password with an apostrophe in it survives.
+   There is no escape, so a value that has to *begin* with a quote
+   character cannot be spelled.
+
+   The file's permissions are not checked, so restricting them is your
+   responsibility.
+
+   A `machine` entry is matched without regard to case, and wins over a
+   `default` entry wherever the two appear in the file.
 
 2. **The prompt**, which reads the username with readline and the
    password with echo off. In a script both come from standard input,
@@ -294,10 +519,13 @@ is not a terminal — cadaver prints the certificate details and
 `Certificate rejected.` rather than asking. There is no flag to accept
 one anyway. Install the CA, or use a certificate the machine trusts.
 
-## Seeing what is on the wire
+## `set debug`, the older way
 
-`set debug` turns on neon's tracing, which goes to standard error, so it
-stays out of the transcript on standard output:
+`--trace` and `--verbose` cover what `set debug` does and tag it with
+the command that caused it, so reach for those first. `set debug` is
+still there for turning one keyword on part way through a session, and
+it is the only way to ask for the credentials in the clear. It writes
+to wherever `--trace` was pointed, or to standard error:
 
 ```bash
 printf 'set debug http\nls\nquit\n' | ./cadaver.exe URL > out.txt 2> wire.txt
@@ -317,8 +545,7 @@ The value is a comma-separated list:
 | `files` | cadaver's own path resolution |
 | `cleartext` | Credentials in the clear — never paste that output anywhere |
 
-`set debug http,xml` is the usual starting point for a request that is
-being answered in a way you did not expect.
+`--verbose` is every one of those except `cleartext`.
 
 ## Telling a server problem from a cadaver problem
 
@@ -385,34 +612,57 @@ propget manifest.pdf batch
 quit
 EOF
 
-./cadaver.exe -r session.txt https://dav.example.com/uploads/ \
-    < /dev/null > transcript.txt 2>&1
+./cadaver.exe --json --trace=wire.log -r session.txt \
+    https://dav.example.com/uploads/ < /dev/null > result.json
+```
 
-if grep -q 'failed:' transcript.txt; then
-    grep -A1 'failed:' transcript.txt
+The exit status is the number of commands that failed, so the whole
+check is one branch:
+
+```bash
+if [ $? -ne 0 ]; then
+    python -c "
+import json
+for c in json.load(open('result.json'))['commands']:
+    if c['status'] == 'failed':
+        print(c['command'], c['args'], '->', c.get('context'))
+"
     exit 1
 fi
 ```
 
-and to fetch one file to standard output, with no local file involved:
+and if one of them needs looking at, the exchange behind it is in the
+trace under the command that caused it:
 
 ```bash
-printf 'cat report.pdf\nquit\n' \
-    | ./cadaver.exe https://dav.example.com/uploads/2026-08-19/ \
-    > report.pdf
+grep -A 30 "(propset manifest.pdf batch 2026-08-19)" wire.log
 ```
 
-That last one needs care: `cat` writes the resource, but the prompt
-lines and the closing message go to standard output too. Use it only
-when you can strip those, or when the consumer tolerates them. For a
-plain download `get` into a named file is the right command.
+To fetch one file, `get` it into a named file. `cat` writes the
+resource to standard output, which is fine at a terminal and not under
+`--json`, where standard output carries the result document — cadaver
+refuses it there rather than corrupting the document.
 
 ## What this fork changed
 
-Everything above describes this fork. Against upstream cadaver on
-Windows the differences that would bite a script are that binary
-transfers are no longer corrupted by line-ending translation, that
-`lcd` and `put` accept Windows paths, that `lls` works at all, and that
-wildcards are matched by a new implementation. [NEWS](NEWS) has the
-full list, and [TODO](TODO) has what is still missing — the exit status
-first among them.
+Everything above describes this fork. Against upstream cadaver the
+differences that would bite a script are:
+
+* The exit status says how many commands failed. Upstream exits 0
+  however the session went, so a script has to parse the transcript.
+* `--json` exists at all, and so do `--trace` and `--verbose`.
+* A failed `get` leaves the local file as it found it, and `--clobber`
+  decides what it does when one is there.
+* `resumeget` truncates back to where it started when the request fails,
+  rather than leaving a second copy appended.
+* Renaming a collection with `move` works.
+* A lock owner containing XML markup characters is escaped, so `set
+  lockowner` accepts one.
+* A `.netrc` value keeps its quote characters, and an entry with only a
+  login is used for the login.
+
+and, on Windows specifically, that binary transfers are no longer
+corrupted by line-ending translation, that `lcd` and `put` accept
+Windows paths, that `lls` works at all, and that wildcards are matched
+by a new implementation. [NEWS](NEWS) has the full list and [TODO](TODO)
+has what is still missing.

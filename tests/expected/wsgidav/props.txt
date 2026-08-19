@@ -26,3 +26,4 @@ Fetching properties for `hello.txt':
 Value of unicode is: ünïcodé
 Deleting collection `/props/props/': succeeded.
 Connection to `127.0.0.1' closed.
+-- cadaver exited 1 --

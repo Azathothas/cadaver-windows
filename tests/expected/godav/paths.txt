@@ -1,7 +1,7 @@
 Local directory: <WORK>
 Local directory: <WORK>\with space
         has space.txt                         26  <DATE>
-Uploading has space.txt to `/paths/has%20space.txt': [.. succeeded.
+Uploading has space.txt to `/paths/has space.txt': [.. succeeded.
 Listing collection `/paths/': succeeded.
         has space.txt                         26  <DATE>
 Downloading `has space.txt' to `fetched space.txt': [.. succeeded.
@@ -11,3 +11,4 @@ Deleting `/paths/has space.txt': succeeded.
 Listing collection `/paths/': collection is empty.
 Local directory: <WORK>
 Connection to `127.0.0.1' closed.
+-- cadaver exited 0 --

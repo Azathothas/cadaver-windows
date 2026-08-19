@@ -22,12 +22,25 @@
 
 #include "cadaver.h"
 
+/* out_start(), out_result() and the rest live here, because with --json
+ * they are also what records the outcome of a command. */
+#include "output.h"
+
 extern int child_running; /* true when we have a child running */
 
 #define CMD_VARY 9999
 
 /* Returns the command structure for the command of given name. */
 const struct command *get_command(const char *name);
+
+/* What argument number `argno' of `cmd' completes to; argument 1 is the
+ * first after the command name.  parmscope_none for anything that does
+ * not complete. */
+enum command_scope completion_scope(const struct command *cmd, int argno);
+
+/* Which argument of `line' the offset `start' falls in: 0 while still on
+ * the command name. */
+int argument_index(const char *line, int start);
 
 /* Naming conventions used here:
  *
@@ -42,7 +55,8 @@ const struct command *get_command(const char *name);
  * Example: "/dav/%e2%82%ac.txt"
  */
 
-/* Convert a URI path to a native path. */
+/* Convert a URI path to a native path.  Never NULL: a path that cannot
+ * be unescaped comes back as it went in. */
 char *native_path_from_uri(const char *uri_path);
 
 /* Convert a relative native path into a URI path, resolved against
@@ -62,13 +76,5 @@ char *getowner(void);
 
 /* Output charset if using iconv(). */
 extern const char *out_charset;
-
-void out_success(void);
-void out_start(const char *verb, const char *noun);
-
-/* Start a command, using a URI-path noun argument. */
-void out_start_uri(const char *verb, const char *uri_path);
-void out_result(int ret);
-int out_handle(int ret);
 
 #endif /* COMMANDS_H */

@@ -72,18 +72,21 @@ static int run_editor(const char *filename)
     editcmd = cad_command_with_path(editor, filename);
 
     if (cad_file_info(filename, &before)) {
-	printf(_("edit: Could not stat file: %s\n"), strerror(errno));
+	out_printf(_("edit: Could not stat file: %s\n"), strerror(errno));
+        cmd_failed(strerror(errno));
 	ne_free(editcmd);
 	return -1;
     }
-    printf(_("edit: Running editor: `%s'...\n"), editcmd);
+    out_printf(_("edit: Running editor: `%s'...\n"), editcmd);
     ret = system(editcmd);
     if (ret == -1) {
-	printf(_("edit: Error executing editor: %s\n"), strerror(errno));
+	out_printf(_("edit: Error executing editor: %s\n"), strerror(errno));
+        cmd_failed(strerror(errno));
     }
     ne_free(editcmd);
     if (cad_file_info(filename, &after)) {
-        printf(_("edit: Error: Could not examine temporary file: %s\n"),
+        cmd_failed(strerror(errno));
+        out_printf(_("edit: Error: Could not examine temporary file: %s\n"),
                strerror(errno));
         return -1;
     }
@@ -92,10 +95,10 @@ static int run_editor(const char *filename)
      * and a one-second timestamp would call that no change. */
     if (before.mtime == after.mtime && before.size == after.size) {
 	/* File not changed. */
-	printf(_("edit: No changes were made.\n"));
+	out_printf(_("edit: No changes were made.\n"));
 	return -1;
     } else {
-	printf(_("edit: Changes were made.\n"));
+	out_printf(_("edit: Changes were made.\n"));
 	return 0;
     }	
 }
@@ -161,7 +164,18 @@ void execute_edit(const char *native_path)
     const char *pnt;
     int fd;
     int is_checkout, is_checkin, can_lock;
-    
+
+    /* The editor is a program that inherits standard output, which
+     * with --json carries the result document.  `cat' and `less' are
+     * refused for the same reason. */
+    if (out_json) {
+        out_start(_("Editing"), native_path);
+        out_fail(_("`edit' runs an editor, which writes to standard output; "
+                   "with --json that carries the result document. "
+                   "Use `get' and `put'.\n"));
+        return;
+    }
+
     uri_path = uri_resolve_native(native_path);
 
     /* The getrestype()  -> PROPFIND
@@ -174,7 +188,8 @@ void execute_edit(const char *native_path)
      * retrieve "index.html" for a collection would be a possible RFE
      * here. */
     if (getrestype(uri_path) == resr_collection) {
-	printf(_("You cannot edit a collection resource (%s).\n"),
+        cmd_failed(_("that is a collection"));
+	out_printf(_("You cannot edit a collection resource (%s).\n"),
 	       uri_path);
 	goto edit_bail;
     }
@@ -196,8 +211,9 @@ void execute_edit(const char *native_path)
      * before one. */
     fd = cad_mkstemp(fname);
     if (fd == -1) {
-	printf(_("Could not create temporary file %s:\n%s\n"), fname,
+	out_printf(_("Could not create temporary file %s:\n%s\n"), fname,
 	       strerror(errno));
+        cmd_failed(strerror(errno));
 	goto edit_bail;
     }
 
@@ -228,7 +244,7 @@ void execute_edit(const char *native_path)
     ne_unhook_post_headers(session.sess, edit_hdrs, &etag);
 
     if (close(fd)) {
-	output(o_finish, _("Error writing to temporary file: %s\n"), 
+	out_fail(_("error writing to temporary file: %s\n"), 
 	       strerror(errno));
     } 
     else if (!run_editor(fname)) {
@@ -252,7 +268,7 @@ void execute_edit(const char *native_path)
 		    upload_okay = 1;
 		} else {
 		    /* TODO: offer to save locally instead */
-		    printf(_("Try uploading again (y/n)? "));
+		    out_printf(_("Try uploading again (y/n)? "));
 		    if (!yesno()) {
 			upload_okay = 1;
 		    }
@@ -268,7 +284,8 @@ void execute_edit(const char *native_path)
     }
     
     if (unlink(fname)) {
-	printf(_("edit: Could not delete temporary file %s:\n%s\n"), fname,
+        cmd_failed(strerror(errno));
+	out_printf(_("edit: Could not delete temporary file %s:\n%s\n"), fname,
 	       strerror(errno));
     }	       
 

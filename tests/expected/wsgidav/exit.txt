@@ -1,0 +1,12 @@
+Creating `exits': succeeded.
+Uploading hello.txt to `/exit/exits/hello.txt': [.. succeeded.
+Deleting `/exit/exits/nosuchresource': failed:
+404 Not Found
+Fetching properties for `nosuchresource': failed:
+404 Not Found
+Unrecognised command. Type 'help' for a list of commands.
+Listing collection `/exit/exits/': succeeded.
+        hello.txt                             28  <DATE>
+Deleting collection `/exit/exits/': succeeded.
+Connection to `127.0.0.1' closed.
+-- cadaver exited 3 --

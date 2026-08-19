@@ -1,6 +1,120 @@
 Changes in the Windows fork (https://github.com/Azathothas/cadaver-windows).
 Entries below this section are upstream's.
 
+Changes in version 0.28-win2:
+* The exit status says what happened.  0 if every command succeeded,
+  otherwise the number that failed, capped at 125 so that it cannot be
+  read as a shell's signalled exit.  A command line that could not be
+  understood at all exits 2, having run nothing.  Upstream exits 0
+  however the session went, which is why AGENTS.md used to say that
+  parsing the transcript was the only option.
+ - `--help' and `--version' exit 0 rather than -1, which Windows
+   reports as 4294967295 and a shell with `set -e' in it treats as a
+   failure of something that in fact worked.
+* --json writes one JSON object to standard output and nothing else:
+  every command with its arguments, the request target, whether it
+  worked, how long it took in wall-clock seconds, the reason and the
+  HTTP method and status when it did not, and everything it printed.
+  `ls', `propget', `propnames', `head', the lock commands, `pwd' and
+  `set' also report what they found as structured fields rather than
+  only as text.  The shape is documented as a contract in AGENTS.md.
+ - `cat', `less' and `edit' are refused under --json: each writes a
+   byte stream to standard output or runs a program that might, and
+   standard output carries the result document.
+ - Everything cadaver prints now goes through src/output.c, which is
+   what makes that guarantee keepable.  tests/offline.sh greps the
+   source for a write to standard output that does not.
+* --trace[=FILE] dumps every request and response, tagged with the
+  command that issued it, so a failing session is diagnosable without
+  a proxy.  Message bodies are included, except the body of a
+  transfer, which is the resource itself.  --verbose widens it to
+  everything neon reports except the credentials in the clear.
+* Upstream #75: a quote character in a .netrc value is no longer
+  removed.  The tokeniser treated a quote as opening a quoted run
+  wherever it met one, so a generated password with an apostrophe in
+  the middle of it silently lost that character and every request
+  failed to authenticate with nothing to say why.  A quote now quotes
+  only when it opens a value, which is the convention the format has
+  and still the way to write a value containing a space.
+* Upstream #64: the lock owner is XML-escaped.  It goes into the LOCK
+  request body, which neon concatenates verbatim, so `set lockowner
+  "foo&bar"' produced a body that was not well-formed and a 400 from
+  the server.
+* Upstream #54: `mv collection newname' renames the collection again.
+  A destination that does not exist yet is a rename; only one that
+  exists and is not a collection is refused, which is what the check
+  was meant to say.
+* Upstream #25: a .netrc entry that supplies a login and no password
+  is used for the login, and only the password is asked for.  It used
+  to be ignored entirely, so both were prompted for and the file
+  looked broken.
+* Upstream #4: `cd' into a collection the server did not report as one
+  says so, and points at -t, rather than asking whether the location
+  is WebDAV-enabled.  A server that answers the PROPFIND perfectly
+  well but writes <collection/> without the DAV namespace lands here,
+  and the old message sent the reporter looking in the wrong place.
+* A failed `get' leaves the local file as it found it.  The download
+  goes to a temporary name beside the destination and is renamed over
+  it once the whole body has arrived; the old code created the
+  destination before making the request, so one 404 left a zero-length
+  file that made every retry prompt for a name instead of downloading.
+* The new `clobber' option, and --clobber, say what `get' does when the
+  local file exists: ask, which is the default and what it always did,
+  yes to overwrite, or no to refuse and fail.  Asking cannot work in a
+  script, where the prompt reads end of input.
+* `resumeget' truncates the local file back to where it started when
+  the request fails.  neon checks that the response was 206 only after
+  the body has gone to the descriptor, so a server that ignored the
+  Range header and answered 200 appended a second complete copy of the
+  resource and cadaver reported an error without saying the file was
+  now wrong.
+* `put' and `mput' report a directory as one.  Opening a directory
+  gives EACCES on Windows, so `mput *' used to report "Could not open
+  file: Permission denied" for each, which was true of neither.
+* `put' names its destination the way every other command does.  It
+  passed the escaped URI path straight to the output, so uploading
+  "has space.txt" reported /dav/has%20space.txt where deleting the
+  same resource reported /dav/has space.txt.
+* `unlock' on a resource with no stored lock says so.  With the input
+  at end of file the prompt for a lock token read nothing and the
+  command ended in silence: no message, no failure line, nothing to
+  tell it from success.
+* `head' reports a failure.  It printed the status and headers when it
+  got them and nothing at all when it did not, so a HEAD that failed
+  left no trace in the transcript.  It now announces itself and
+  reports the outcome the way `ls' does.
+* `discover' and `steal' distinguish a server that reported no locks
+  from one that could not answer.  Both used to read "no locks found".
+* Tab completion, verified in a real Windows console for the first
+  time, now works for the commands that take one remote argument and
+  one of something else.  `get', `put', `resumeget', `propget',
+  `propdel', `propset', `chexec' and `label' offered nothing at all,
+  because the completion scope was a property of the command rather
+  than of the argument.
+* Bug fix: search_netrc() stopped at the first `default' entry, so a
+  default written above a named one shadowed it and cadaver
+  authenticated as somebody else with no indication that the entry it
+  was asked to use had been passed over.  The host comparison also
+  ignores case now, as host names do.
+* Bug fix: execute_command() freed one fewer token than it allocated,
+  leaking the last argument of every command.
+* From upstream pull request #74: `propnames' marks each name with the
+  bullet that `propget' and `head' use.
+* Tests:
+ - tests/netrc.sh, 26 unit tests for lib/netrc.c.  What that parser
+   gets wrong is invisible in use, which is how #75 survived.
+ - Eight more scripted sessions: the exit status, --json, --trace,
+   `clobber', renaming a collection, a lock owner containing markup,
+   and two that authenticate from a .netrc against a subtree of the Go
+   test server that now requires it -- one with a password holding an
+   apostrophe, one supplying only the login.
+ - Every session pins its exit status on the last line of the
+   transcript.
+ - A session may bring a .flags file of extra command-line arguments,
+   a .home holding a .netrc, a .stdin, and a .servers naming the
+   servers it applies to.
+ - tests/offline.sh is 41 checks rather than 18.
+
 Changes in version 0.28-win1:
 * cadaver builds and runs on Windows as a native MinGW-w64 program: no
   Cygwin runtime, no WSL, no MSYS2 needed at run time. A release is one

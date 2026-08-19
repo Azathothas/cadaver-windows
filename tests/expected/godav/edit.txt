@@ -11,3 +11,4 @@ line two
 edited-by-the-test-suite
 Deleting collection `/edit/edited/': succeeded.
 Connection to `127.0.0.1' closed.
+-- cadaver exited 0 --

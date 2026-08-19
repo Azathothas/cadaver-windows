@@ -114,72 +114,6 @@ extern const struct command commands[]; /* prototype */
 /* Output character encoding from the locale. */
 const char *out_charset;
 
-/* Tell them we are doing 'VERB' to 'NOUN'.
- * (really 'METHOD' to 'RESOURCE' but hey.) */
-void out_start(const char *verb, const char *noun)
-{
-    output(o_start, "%s `%s':", verb, noun);
-}
-
-void out_start_uri(const char *verb, const char *path)
-{
-    char *native_path = native_path_from_uri(path);
-    output(o_start, "%s `%s':", verb, native_path);
-    ne_free(native_path);
-}
-
-static void out_start_2uri(const char *verb,
-                           const char *path1, const char *path2)
-{
-    char *native1 = native_path_from_uri(path1);
-    char *native2 = native_path_from_uri(path2);
-    output(o_start, _("%s `%s' to `%s':"), verb, native1, native2);
-    ne_free(native1);
-    ne_free(native2);
-}
-
-void out_success(void)
-{
-    output(o_finish, _("succeeded.\n"));
-}
-
-void out_result(int ret)
-{
-    switch (ret) {
-    case NE_OK:
-	out_success();
-	break;
-    case NE_AUTH:
-    case NE_PROXYAUTH:
-	output(o_finish, _("authentication failed.\n"));
-	break;
-    case NE_CONNECT:
-	output(o_finish, _("could not connect to server.\n"));
-	break;
-    case NE_TIMEOUT:
-	output(o_finish, _("connection timed out.\n"));
-	break;
-    default:
-        if (ret == NE_REDIRECT) {
-            const ne_uri *dest = ne_redirect_location(session.sess);
-            if (dest) {
-                char *uri = ne_uri_unparse(dest);
-                output(o_finish, _("redirect to %s\n"), uri);
-                ne_free(uri);
-                break;
-            }
-        }
-	output(o_finish, _("failed:\n%s\n"), ne_get_error(session.sess));
-	break;
-    }
-}
-
-int out_handle(int ret)
-{
-    out_result(ret);
-    return (ret == NE_OK);
-}
-
 #ifdef HAVE_ICONV
 
 enum conv_mode { TO_UTF8, FROM_UTF8 };
@@ -285,6 +219,46 @@ char *command_generator(const char *text, int state)
 
 #endif
 
+/* Which argument the point is in: 0 while still on the command name, 1
+ * for the first argument.  Counts the runs of non-space before it. */
+int argument_index(const char *line, int start)
+{
+    int n = 0, in_word = 0, i;
+
+    for (i = 0; i < start && line[i]; i++) {
+        if (line[i] == ' ' || line[i] == '\t')
+            in_word = 0;
+        else if (!in_word) {
+            in_word = 1;
+            n++;
+        }
+    }
+
+    return n;
+}
+
+/* What argument `argno' of `cmd' completes to. */
+enum command_scope completion_scope(const struct command *cmd, int argno)
+{
+    size_t len, at;
+
+    if (cmd == NULL || cmd->completes == NULL || argno < 1)
+        return parmscope_none;
+
+    len = strlen(cmd->completes);
+    if (len == 0) return parmscope_none;
+
+    at = (size_t)argno - 1;
+    if (at >= len) at = len - 1;
+
+    switch (cmd->completes[at]) {
+    case 'r': return parmscope_remote;
+    case 'l': return parmscope_local;
+    case 'o': return parmscope_option;
+    default:  return parmscope_none;
+    }
+}
+
 static void execute_logout(void)
 {
     ne_forget_auth(session.sess);
@@ -313,24 +287,37 @@ static void dispatch(const char *verb, const char *filename,
     out_result((*func)(session.sess, arg));
 }
 
+/* The lock owner, wrapped in the <href> element neon puts in the LOCK
+ * body.  neon concatenates lock->owner into that body verbatim -- there
+ * is no ne_xml_escape to call -- so an owner containing an ampersand or
+ * an angle bracket would make the request body ill-formed and the
+ * server answer 400.  Escaping it here is what keeps `set lockowner
+ * "foo&bar"; lock' working. */
 char *getowner(void)
 {
-    char *ret, *owner = get_option(opt_lockowner);
-    if (owner) {
-	ret = ne_concat("<href>", owner, "</href>", NULL);
-	return ret;
-    } else {
-	return NULL;
-    }
+    char *owner = get_option(opt_lockowner);
+    ne_buffer *buf;
+
+    if (!owner) return NULL;
+
+    buf = ne_buffer_create();
+    ne_buffer_czappend(buf, "<href>");
+    xml_escape(buf, owner);
+    ne_buffer_czappend(buf, "</href>");
+
+    return ne_buffer_finish(buf);
 }
 
-/* Resolve path, appending trailing slash if resource is a
- * collection. If 'collection' is non-NULL, *collection is set to
- * non-zero iff the resource is a collection. */
-static char *uri_resolve_native_true(const char *path, int *collection)
+/* Resolve path, appending a trailing slash if the resource is a
+ * collection.  If 'type' is non-NULL, *type is set to what the resource
+ * turned out to be -- resr_error meaning it could not be found, which
+ * is not the same as its being a plain resource. */
+static char *uri_resolve_native_true(const char *path,
+                                     enum resource_type *type)
 {
     char *uri_path = uri_resolve_native(path);
-    int is_coll = getrestype(uri_path) == resr_collection;
+    enum resource_type restype = getrestype(uri_path);
+    int is_coll = restype == resr_collection;
     const ne_uri *redir = ne_redirect_location(session.sess);
 
     NE_DEBUG(DEBUG_FILES, "cadaver: Resolve true [%s] -> [%s]\n", path, uri_path);
@@ -355,7 +342,8 @@ static char *uri_resolve_native_true(const char *path, int *collection)
         if (ne_uri_cmp(redir, &uri) == 0) {
             ne_free(uri_path);
             uri_path = ne_strdup(redir->path);
-            is_coll = getrestype(uri_path) == resr_collection;
+            restype = getrestype(uri_path);
+            is_coll = restype == resr_collection;
             NE_DEBUG(DEBUG_FILES, "cadaver: Redirected to %s, a %scollection.\n",
                      uri_path, is_coll ? "" : "non-");
         }
@@ -364,7 +352,7 @@ static char *uri_resolve_native_true(const char *path, int *collection)
         ne_uri_free(&uri);
     }
 
-    if (collection) *collection = is_coll;
+    if (type) *type = restype;
 
     if (is_coll && !ne_path_has_trailing_slash(uri_path)) {
         char *tmp = ne_concat(uri_path, "/", NULL);
@@ -423,14 +411,17 @@ static const char *get_depth(int d)
 static void print_uri(const ne_uri *uri)
 {
     char *str = ne_uri_unparse(uri);
-    printf("%s", str);
+    out_printf("%s", str);
     free(str);
 }
 
 static void print_lock(const struct ne_lock *lock)
 {
     char *uri = ne_uri_unparse(&lock->uri);
-    printf(_("Lock token <%s>:\n"
+
+    res_lock(lock);
+
+    out_printf(_("Lock token <%s>:\n"
 	     "  Depth %s on `%s'\n"
 	     "  Scope: %s  Type: %s  Timeout: %s\n"
 	     "  Owner: %s\n"), 
@@ -441,39 +432,52 @@ static void print_lock(const struct ne_lock *lock)
     free(uri);
 }
 
+/* What a lock discovery turned up.  The two counts are kept apart
+ * because a resource the server could not report on is not the same
+ * answer as a resource with no locks on it. */
+struct discovery {
+    int locks;
+    int failures;
+};
+
 static void discover_result(void *userdata, const struct ne_lock *lock,
-                            const ne_uri *uri, 
+                            const ne_uri *uri,
                             const ne_status *status)
 {
-    int *count = userdata;
+    struct discovery *found = userdata;
     if (lock) {
-	if (*count == 0) {
-	    printf("\n");
+	if (found->locks == 0) {
+	    out_printf("\n");
 	}
 	print_lock(lock);
-	*count += 1;
+	found->locks += 1;
     } else {
-	printf(_("Failed on %s: %d %s\n"), uri->path,
+	out_printf(_("Failed on %s: %d %s\n"), uri->path,
 	       status->code, status->reason_phrase);
+        cmd_failed(status->reason_phrase);
+        found->failures += 1;
     }
 }
 
-static void steal_result(void *userdata, const struct ne_lock *lock, 
-			 const ne_uri *uri, 
+static void steal_result(void *userdata, const struct ne_lock *lock,
+			 const ne_uri *uri,
                          const ne_status *status)
 {
-    int *count = userdata;
+    struct discovery *found = userdata;
     if (lock != NULL) {
-	if (*count == 0) {
-	    printf("\n");
+	if (found->locks == 0) {
+	    out_printf("\n");
 	}
+        res_lock(lock);
 	print_uri(&lock->uri);
-	printf(": <%s>\n", lock->token);
+	out_printf(": <%s>\n", lock->token);
 	ne_lockstore_add(session.locks, ne_lock_copy(lock));
-	*count += 1;
+	found->locks += 1;
     } else {
-	printf(_("Failed on %s: %d %s\n"), uri->path,
+	out_printf(_("Failed on %s: %d %s\n"), uri->path,
 	       status->code, status->reason_phrase);
+        cmd_failed(status->reason_phrase);
+        found->failures += 1;
     }
 }
 
@@ -481,14 +485,27 @@ static void do_discover(const char *path, const char *mesg,
 			ne_lock_result result_cb)
 {
     char *uri_path = uri_resolve_native(path);
-    int ret, count = 0;
+    struct discovery found = {0, 0};
+    int ret;
+
     out_start(mesg, path);
-    ret = ne_lock_discover(session.sess, uri_path, result_cb, &count);
+    ret = ne_lock_discover(session.sess, uri_path, result_cb, &found);
     switch (ret) {
     case NE_OK:
-	if (count == 0) {
-	    printf(" no locks found.\n");
+        /* Three outcomes, which used to read as two.  A resource the
+         * server could not report on has already said so above and is
+         * not an answer of "no locks"; a server that reported an empty
+         * lockdiscovery has answered the question. */
+        if (found.failures) {
+            out_fail(_("%d of the resources asked about could not be "
+                       "reported on.\n"), found.failures);
+        }
+        else if (found.locks == 0) {
+	    out_success_as(_("the server reported no locks.\n"));
 	}
+        else {
+            out_done();
+        }
 	break;
     default:
 	out_result(ret);
@@ -518,7 +535,7 @@ static void execute_showlocks(void)
     }
 
     if (count == 0) {
-	printf(_("No owned locks.\n"));
+	out_printf(_("No owned locks.\n"));
     }
 }
 
@@ -526,9 +543,11 @@ static void execute_lock(const char *path)
 {
     char *uri_path;
     struct ne_lock *lock;
+    enum resource_type restype;
     int iscoll;
 
-    uri_path = uri_resolve_native_true(path, &iscoll);
+    uri_path = uri_resolve_native_true(path, &restype);
+    iscoll = restype == resr_collection;
     if (iscoll)
         out_start(_("Locking collection"), path);
     else
@@ -564,6 +583,12 @@ static void execute_unlock(const char *res)
 	lock = ne_lock_create();
 	lock->token = readline(_("Enter locktoken: "));
 	if (!lock->token || strlen(lock->token) == 0) {
+            /* This used to end the command in silence: no message, no
+             * failure line, nothing in the transcript to tell it from
+             * success.  In a script the prompt reads end of input, so
+             * it was the usual outcome rather than a rare one. */
+            out_fail(_("no lock is held on it, and no lock token was "
+                       "given.\n"));
 	    goto unlock_fail;
 	}
 	ne_fill_server_uri(session.sess, &lock->uri);
@@ -596,11 +621,13 @@ static int all_iterator(void *userdata, const ne_propname *pname,
     if (value != NULL) {
 	char *nval = native_from_utf8(value);
         char *sval = ne_shave(nval, " \r\n\t");
-	printf(_("%s %s%s = %s\n"), bullet_str(), nnspace, nname, sval);
+	out_printf(_("%s %s%s = %s\n"), bullet_str(), nnspace, nname, sval);
+        res_property(pname->nspace, pname->name, sval, 0);
 	ne_free(nval);
     }
     else if (status) {
-	printf(_("-- failed for %s%s: %s\n"), nnspace, nname, status->reason_phrase);
+	out_printf(_("-- failed for %s%s: %s\n"), nnspace, nname, status->reason_phrase);
+        cmd_failed(status->reason_phrase);
     }
     ne_free(nnspace);
     ne_free(nname);
@@ -614,7 +641,7 @@ static void pget_results(void *userdata, const ne_uri *uri,
     const char *value;
     char *nname;
 
-    printf("\n");
+    out_printf("\n");
 
     if (userdata == NULL) {
 	/* allprop */
@@ -627,17 +654,19 @@ static void pget_results(void *userdata, const ne_uri *uri,
     value = ne_propset_value(set, pname);
     if (value != NULL) {
 	char *nval = native_from_utf8(value);
-	printf(_("Value of %s is: %s\n"), nname, nval);
+	out_printf(_("Value of %s is: %s\n"), nname, nval);
 	ne_free(nval);
     }
     else {
 	const ne_status *status = ne_propset_status(set, pname);
 	
 	if (status) {
-	    printf(_("Could not fetch property: %d %s\n"), 
+	    out_printf(_("Could not fetch property: %d %s\n"),
 		   status->code, status->reason_phrase);
+            cmd_failed(status->reason_phrase);
 	} else {
-	    printf(_("Server did not return result for %s\n"),
+            cmd_failed(_("the server returned no result for the property"));
+	    out_printf(_("Server did not return result for %s\n"),
 		   nname);
 	}
     } 
@@ -709,15 +738,25 @@ static void execute_propget(const char *res, const char *name)
     if (ret != NE_OK) {
 	out_result(ret);
     }
+    else {
+        /* The answer has already been printed by pget_results(); this
+         * closes the operation so that it carries the request it
+         * made. */
+        out_done();
+    }
 
     if (uname) ne_free(uname);
     ne_free(uri_path);
 }
 
+/* `propget' and `head' mark each line with the bullet; this used to use
+ * a plain space, so the three listings did not read alike.  Taken from
+ * upstream pull request #74. */
 static int propname_iterator(void *userdata, const ne_propname *pname,
 			     const char *value, const ne_status *st)
 {
-    printf("\n %s%s", pname->nspace, pname->name);
+    out_printf("\n%s %s%s", bullet_str(), pname->nspace, pname->name);
+    res_property(pname->nspace, pname->name, NULL, 0);
     return 0;
 }
 
@@ -731,13 +770,14 @@ static void execute_propnames(const char *path)
 {
     char *uri_path = uri_resolve_native(path);
     int ret;
-    printf(_("Fetching property names for %s:"), path);
+    out_start_raw(_("Fetching property names for %s:"), path);
     if ((ret = ne_propnames(session.sess, uri_path, NE_DEPTH_ZERO,
                             propname_results, NULL)) != NE_OK) {
         out_result(ret);
     }
     else {
-        putchar('\n');
+        out_putchar('\n');
+        out_done();
     }
     ne_free(uri_path);
 }
@@ -763,15 +803,16 @@ static void remove_locks(const char *p, int depth)
 
 static void execute_delete(const char *path)
 {
-    int is_coll;
-    char *uri_path = uri_resolve_native_true(path, &is_coll);
+    enum resource_type restype;
+    char *uri_path = uri_resolve_native_true(path, &restype);
+    int is_coll = restype == resr_collection;
 
     out_start_uri(_("Deleting"), uri_path);
     if (is_coll) {
-	output(o_finish, 
-_("is a collection resource.\n"
+	out_fail(
+_("it is a collection resource.\n"
 "The `rm' command cannot be used to delete a collection.\n"
-"Use `rmcol %s' to delete this collection and ALL its contents.\n"), 
+"Use `rmcol %s' to delete this collection and ALL its contents.\n"),
                path);
     }
     else {
@@ -784,13 +825,13 @@ _("is a collection resource.\n"
 
 static void execute_rmcol(const char *path)
 {
-    int is_coll;
-    char *uri_path = uri_resolve_native_true(path, &is_coll);
+    enum resource_type restype;
+    char *uri_path = uri_resolve_native_true(path, &restype);
+    int is_coll = restype == resr_collection;
 
     out_start_uri(_("Deleting collection"), uri_path);
     if (!is_coll) {
-	output(o_finish, 
-	       _("is not a collection.\n"
+	out_fail(_("it is not a collection.\n"
 		 "The `rmcol' command can only be used to delete collections.\n"
 		 "Use `rm %s' to delete this resource.\n"), path);
     }
@@ -852,7 +893,11 @@ char *native_path_from_uri(const char *uri_path)
 {
     char *utf8 = ne_path_unescape(uri_path);
 
-    if (!utf8) return NULL;
+    /* A path with a malformed escape in it cannot be unescaped, and
+     * every caller hands what comes back to a "%s".  Showing the
+     * escaped form is worse than showing the unescaped one and better
+     * than the alternatives. */
+    if (!utf8) return ne_strdup(uri_path);
 
     if (!get_bool_option(opt_utf8)) {
         char *native = native_from_utf8(utf8);
@@ -880,13 +925,22 @@ static void execute_less(const char *native)
     FILE *p;
     int ret;
 
+    if (out_json) {
+        out_start(_("Displaying"), native);
+        out_fail(_("`less' runs a pager, which writes to standard output; "
+                   "with --json that carries the result document. "
+                   "Use `get'.\n"));
+        return;
+    }
+
     pager = choose_pager();
-    printf(_("Displaying `%s':\n"), native);
+    out_printf(_("Displaying `%s':\n"), native);
 
     p = cad_popen_write(pager);
     if (p == NULL) {
-	printf(_("Error! Could not spawn pager `%s':\n%s\n"), pager,
+	out_printf(_("Error! Could not spawn pager `%s':\n%s\n"), pager,
 		 strerror(errno));
+        cmd_failed(_("could not spawn the pager"));
         return;
     }
 
@@ -898,7 +952,12 @@ static void execute_less(const char *native)
         out_result(ret);
     }
     else if ((ret = cad_pclose(p)) != 0) {
-        printf(_("Warning: Abnormal exit from pager (%d).\n"), ret);
+        out_printf(_("Warning: Abnormal exit from pager (%d).\n"), ret);
+    }
+    else {
+        /* The pager consumed it; nothing else says the GET worked. */
+        out_start(_("Displaying"), native);
+        out_success();
     }
     child_running = false;
     ne_free(uri_path);
@@ -906,8 +965,18 @@ static void execute_less(const char *native)
 
 static void execute_cat(const char *native_path)
 {
-    char *uri_path = uri_resolve_native(native_path);
+    char *uri_path;
     int ret, mode;
+
+    if (out_json) {
+        out_start(_("Fetching"), native_path);
+        out_fail(_("`cat' writes the resource to standard output, which "
+                   "with --json carries the result document. "
+                   "Use `get'.\n"));
+        return;
+    }
+
+    uri_path = uri_resolve_native(native_path);
 
     /* ne_get() writes to the descriptor rather than through stdio, so
      * anything buffered has to go out first or it would appear after
@@ -915,7 +984,7 @@ static void execute_cat(const char *native_path)
      * duration so that the bytes on the far end of a pipe are the bytes
      * the server sent; on Windows it would otherwise gain a carriage
      * return before every newline. */
-    fflush(stdout);
+    out_flush();
     mode = cad_set_binary(STDOUT_FILENO);
 
     ret = ne_get(session.sess, uri_path, STDOUT_FILENO);
@@ -939,11 +1008,20 @@ static void do_copymove(int argc, const char *argv[],
 {
     /* We are guaranteed that argc > 2... */
     const char *native_dest = argv[argc-1];
-    int n, dest_is_coll, error;
-    char *uri_dest = uri_resolve_native_true(native_dest, &dest_is_coll);
+    enum resource_type dest_type;
+    int n, dest_is_coll, dest_exists, error;
+    char *uri_dest = uri_resolve_native_true(native_dest, &dest_type);
     struct {
         char *src, *dest;
     } *ops;
+
+    /* Whether the destination is there at all.  A name that does not
+     * exist yet is not a non-collection, which is what refusing to move
+     * a collection onto one used to assume: `mv coll/ newname/' failed
+     * with "Refusing to move collection to non-collection" although it
+     * is a rename and worked before 0.26.  Upstream issue #54. */
+    dest_is_coll = dest_type == resr_collection;
+    dest_exists = dest_type != resr_error;
 
     /* Iterate and build up pairs of (source, dest) paths which will
      * be passed to the callback in turn, validating and failing early
@@ -951,21 +1029,26 @@ static void do_copymove(int argc, const char *argv[],
     ops = ne_calloc(argc * sizeof *ops);
 
     for (n = 0, error = 0; !error && n < argc-1; n++) {
+        enum resource_type src_type;
         int src_is_coll;
 
-        ops[n].src = uri_resolve_native_true(argv[n], &src_is_coll);
+        ops[n].src = uri_resolve_native_true(argv[n], &src_type);
+        src_is_coll = src_type == resr_collection;
 
-        /* The (src, dest) paths have now been resolved, there are
-         * three valid cases consider, plus errors:
+        /* The (src, dest) paths have now been resolved.  There are
+         * four valid cases, plus errors:
          *
          * 1. Both source and destination are collections.
          *    (/foo/, /bar/) must translate to (/foo/, /bar/foo/)
          * 2. Only the destination is a collection.
          *    (/foo.txt, /bar/) must translate to (/foo.txt, /bar/foo.txt)
          * 3. Simplest 'mv a b' case, no translation required.
+         * 4. A collection source and a destination that does not exist
+         *    yet, which is a rename of the collection.
          */
         if (strcmp(ops[n].src, "/") == 0) {
-            printf(_("Error: Refusing to %s the server root '/'\n"), v2);
+            out_printf(_("Error: Refusing to %s the server root '/'\n"), v2);
+            cmd_failed(_("refusing to act on the server root"));
             error = 1;
         }
         else if (dest_is_coll && src_is_coll) {
@@ -974,10 +1057,28 @@ static void do_copymove(int argc, const char *argv[],
             ops[n].dest = ne_concat(uri_dest, base_name(tmp), NULL);
             ne_free(tmp);
         }
-        else if (src_is_coll && !dest_is_coll) {
-            printf(_("Error: Refusing to %s collection '%s' to "
+        else if (src_is_coll && dest_exists) {
+            /* The destination is there and is not a collection, so
+             * this would replace a plain resource with a collection. */
+            out_printf(_("Error: Refusing to %s collection '%s' to "
                      "non-collection '%s'\n"), v2, ops[n].src, uri_dest);
+            cmd_failed(_("the destination is not a collection"));
             error = 1;
+        }
+        else if (src_is_coll && argc > 2) {
+            /* Several sources need somewhere to put them all. */
+            out_printf(_("Error: Refusing to %s collection '%s' to '%s', "
+                         "which does not exist\n"), v2, ops[n].src, uri_dest);
+            cmd_failed(_("the destination collection does not exist"));
+            error = 1;
+        }
+        else if (src_is_coll) {
+            /* Case 4: the destination does not exist, so this is a
+             * rename of the collection.  The trailing slash goes on
+             * both ends, which is what a server expects of a
+             * collection URI. */
+            ops[n].dest = ne_path_has_trailing_slash(uri_dest)
+                ? ne_strdup(uri_dest) : ne_concat(uri_dest, "/", NULL);
         }
         else if (dest_is_coll) {
             /* Case 2. */
@@ -1016,13 +1117,14 @@ static void simple_copy(const char *src, const char *dest)
 
 static void execute_rename(const char *native_src, const char *native_dest)
 {
-    int src_is_coll;
-    char *uri_src = uri_resolve_native_true(native_src, &src_is_coll);
+    enum resource_type src_type;
+    char *uri_src = uri_resolve_native_true(native_src, &src_type);
+    int src_is_coll = src_type == resr_collection;
     char *uri_dest = uri_resolve_native(native_dest);
 
     out_start_2uri(_("Renaming"), uri_src, uri_dest);
     if (!src_is_coll && ne_path_has_trailing_slash(uri_dest)) {
-        output(o_finish, _("failed, source path is not a collection.\n"));
+        out_fail(_("the source path is not a collection.\n"));
     }
     else {
         out_result(ne_move(session.sess, 0, uri_src, uri_dest));
@@ -1032,12 +1134,22 @@ static void execute_rename(const char *native_src, const char *native_dest)
     ne_free(uri_dest);
 }
 
+/* Downloads `native_remote'.  A plain download goes to a temporary file
+ * beside the destination and is renamed over it once the whole body has
+ * arrived, so that a request which fails part way through leaves neither
+ * a truncated file nor an empty one: the old behaviour created the
+ * destination before making the request, and one 404 then left a
+ * zero-length file that made every retry prompt for a name instead.
+ *
+ * A resumed download has to append to the file that is already there,
+ * so it records the size first and truncates back to it on failure. */
 static void do_get(const char *native_remote, const char *native_local, int resume)
 {
-    char *filename, *uri_path;
+    char *filename = NULL, *tmpname = NULL, *uri_path;
     ne_content_range range;
     struct cad_finfo info;
-    int fd, ret, flags;
+    ne_off_t resume_from = 0;
+    int fd = -1, ret, exists;
 
     uri_path = uri_resolve_native(native_remote);
 
@@ -1048,46 +1160,74 @@ static void do_get(const char *native_remote, const char *native_local, int resu
         filename = ne_strdup(base_name(native_remote));
     }
 
-    if (cad_file_info(filename, &info) == 0) {
-        if (!resume) {
-            char buf[BUFSIZ];
-            /* File already exists... don't overwrite */
-            snprintf(buf, BUFSIZ, _("Enter local filename for `%s': "),
-                     native_remote);
-            ne_free(filename);
-            filename = readline(buf);
-            if (filename == NULL || strlen(filename) == 0) {
-                printf(_("cancelled.\n"));
-                goto fail;
-            }
-            flags = O_CREAT|O_TRUNC;
-        }
-        else if (info.is_reg) {
-            range.start = info.size;
-            range.end = -1;
-            range.total = 0;
-            flags = O_APPEND;
-        }
-        else {
-            printf(_("Cannot resume download to `%s' - not a regular file.\n"),
-                   filename);
+    exists = cad_file_info(filename, &info) == 0;
+
+    if (resume) {
+        if (!exists) {
+            int errnum = errno;
+            out_start(_("Resuming download of"), native_remote);
+            out_fail(_("cannot resume download to `%s': %s\n"),
+                     filename, strerror(errnum));
             goto fail;
         }
-    }
-    else if (resume) {
-        int errnum = errno;
-        printf(_("Cannot resume download to `%s': %s\n"), filename,
-               strerror(errnum));
-        goto fail;
+        if (!info.is_reg) {
+            out_start(_("Resuming download of"), native_remote);
+            out_fail(_("cannot resume download to `%s': "
+                       "not a regular file.\n"), filename);
+            goto fail;
+        }
+
+        resume_from = info.size;
+        range.start = resume_from;
+        range.end = -1;
+        range.total = 0;
+
+        fd = open(filename, O_APPEND|O_WRONLY|OPEN_BINARY_FLAGS|O_LARGEFILE);
     }
     else {
-        flags = O_CREAT|O_EXCL;
+        if (exists) {
+            switch (clobber) {
+            case clobber_no:
+                out_start(_("Downloading"), native_remote);
+                out_fail(_("the local file `%s' exists, and clobber is set "
+                           "to no.\n"), filename);
+                goto fail;
+            case clobber_yes:
+                break;
+            case clobber_ask:
+            default: {
+                char buf[BUFSIZ];
+                char *answer;
+
+                ne_snprintf(buf, sizeof buf,
+                            _("Enter local filename for `%s': "),
+                            native_remote);
+                answer = readline(buf);
+                if (answer == NULL || strlen(answer) == 0) {
+                    if (answer) ne_free(answer);
+                    out_start(_("Downloading"), native_remote);
+                    out_fail(_("cancelled; the local file `%s' exists and "
+                               "no other name was given.\n"), filename);
+                    goto fail;
+                }
+                ne_free(filename);
+                filename = answer;
+                break;
+            }
+            }
+        }
+
+        /* Beside the destination rather than in the temporary
+         * directory, so that the rename cannot cross a file system. */
+        tmpname = ne_concat(filename, ".cadaver-XXXXXX", NULL);
+        fd = cad_mkstemp(tmpname);
     }
 
-    fd = open(filename, flags|O_WRONLY|OPEN_BINARY_FLAGS|O_LARGEFILE, 0644);
-    output(o_download, _("Downloading `%s' to `%s':"), native_remote, filename);
+    out_start_transfer(o_download, _("Downloading `%s' to `%s':"),
+                       native_remote, filename);
+
     if (fd < 0) {
-        output(o_finish, _("failed:\n%s\n"), strerror(errno));
+        out_fail("%s\n", strerror(errno));
         goto fail;
     }
 
@@ -1098,16 +1238,42 @@ static void do_get(const char *native_remote, const char *native_local, int resu
         ret = ne_get(session.sess, uri_path, fd);
     }
 
+    if (ret != NE_OK && resume) {
+        /* ne_get_range() checks that the response was 206 only after
+         * the body has gone to the descriptor, so a server that ignored
+         * the Range header and answered 200 has just appended a whole
+         * second copy of the resource.  Put the file back to the length
+         * it had before the request. */
+        if (cad_truncate(fd, resume_from) != 0) {
+            out_printf(_("Warning: could not truncate `%s' back to "
+                         "%" NE_FMT_NE_OFF_T " bytes: %s\n"),
+                       filename, resume_from, strerror(errno));
+        }
+    }
+
     if (close(fd) && ret == NE_OK) {
         int errnum = errno;
         ret = NE_ERROR;
         ne_set_error(session.sess, _("Could not write to file: %s"),
                      strerror(errnum));
     }
+    fd = -1;
+
+    if (tmpname) {
+        if (ret == NE_OK && cad_rename_over(tmpname, filename) != 0) {
+            ret = NE_ERROR;
+            ne_set_error(session.sess, _("Could not rename %s to %s: %s"),
+                         tmpname, filename, strerror(errno));
+        }
+        if (ret != NE_OK) remove(tmpname);
+    }
+
     out_result(ret);
 
 fail:
+    if (fd >= 0) (void) close(fd);
     ne_free(uri_path);
+    if (tmpname) ne_free(tmpname);
     if (filename) ne_free(filename);
 }
 
@@ -1123,10 +1289,30 @@ static void execute_resumeget(const char *remote, const char *local)
 
 static void simple_put(const char *local, const char *remote)
 {
-    int fd = open(local, O_RDONLY | OPEN_BINARY_FLAGS | O_LARGEFILE);
-    output(o_upload, _("Uploading %s to `%s':"), local, remote);
+    struct cad_finfo info;
+    char *native_remote = native_path_from_uri(remote);
+    int fd;
+
+    /* Every other command names a resource in native form; this one
+     * used to hand output() the escaped URI path, so uploading
+     * "has space.txt" reported /paths/has%20space.txt where deleting it
+     * reported /paths/has space.txt. */
+    out_start_transfer(o_upload, _("Uploading %s to `%s':"), local,
+                       native_remote);
+    ne_free(native_remote);
+
+    /* `mput *' matches directories, and opening one gives EACCES on
+     * Windows and EISDIR elsewhere, so it used to report "Could not
+     * open file: Permission denied" -- true of neither. */
+    if (cad_file_info(local, &info) == 0 && info.is_dir) {
+        out_fail(_("%s is a directory, and there is no recursive upload "
+                   "yet.\n"), local);
+        return;
+    }
+
+    fd = open(local, O_RDONLY | OPEN_BINARY_FLAGS | O_LARGEFILE);
     if (fd < 0) {
-	output(o_finish, _("Could not open file: %s\n"), strerror(errno));
+	out_fail(_("could not open file: %s\n"), strerror(errno));
     } else {
 	out_result(ne_put(session.sess, remote, fd));
 	(void) close(fd);
@@ -1221,10 +1407,11 @@ static void execute_chexec(const char *val, const char *native_path)
         ops[0].value = "F";
     }
     else {
-        printf(_("Use:\n"
+        out_printf(_("Use:\n"
                  "   chexec + %s   to make the resource executable\n"
                  "or chexec - %s   to make the resource unexecutable\n"),
                  native_path, native_path);
+        cmd_failed(_("the first argument must be + or -"));
         return;
     }
     
@@ -1247,19 +1434,44 @@ static void execute_chexec(const char *val, const char *native_path)
 static void execute_head(const char *native_path)
 {
     char *uri_path = uri_resolve_native(native_path);
-    ne_request *req = ne_request_create(session.sess, "HEAD", uri_path);
+    ne_request *req;
+    int ret;
 
-    if (ne_begin_request(req) == NE_OK) {
+    /* `head' used to print the status and headers when it got them and
+     * nothing at all when it did not, so a HEAD that failed left no
+     * trace in the transcript.  It now announces itself and reports the
+     * outcome the way `ls' does, before the answer. */
+    out_start(_("Fetching headers for"), native_path);
+
+    /* After out_start(), which forgets the request the operation before
+     * it made: the hook that records this one runs from
+     * ne_request_create(). */
+    req = ne_request_create(session.sess, "HEAD", uri_path);
+
+    ret = ne_begin_request(req);
+    if (ret == NE_OK) {
         const char *name, *value;
         void *iter = NULL;
+        int status = ne_get_status(req)->code;
 
-        printf(_("Response status-code %d, headers:\n"), ne_get_status(req)->code);
+        /* A HEAD that was answered is a HEAD that worked, whatever the
+         * status: the status is the answer the command asked for. */
+        out_success();
+
+        out_printf(_("Response status-code %d, headers:\n"), status);
+        res_http_status(status);
+
         while ((iter = ne_response_header_iterate(req, iter,
-                                                  &name, &value)) != NULL)
-            printf("%s %s: %s\n", bullet_str(), name, value);
+                                                  &name, &value)) != NULL) {
+            out_printf("%s %s: %s\n", bullet_str(), name, value);
+            res_header(name, value);
+        }
 
         if (ne_discard_response(req) == NE_OK)
             ne_end_request(req);
+    }
+    else {
+        out_result(ret);
     }
 
     ne_request_destroy(req);
@@ -1270,9 +1482,12 @@ static void execute_lpwd(void)
 {
     char pwd[BUFSIZ];
     if (getcwd(pwd, BUFSIZ) == NULL) {
-	perror("pwd");
+        out_printf(_("Could not read the local directory: %s\n"),
+                   strerror(errno));
+        cmd_failed(strerror(errno));
     } else {
-	printf(_("Local directory: %s\n"), pwd);
+	out_printf(_("Local directory: %s\n"), pwd);
+        res_path(pwd);
     }
 }
 
@@ -1299,8 +1514,9 @@ static void execute_lls(int argc, const char **argv)
             /* The listing is always in the long form, so -l is the one
              * option that would not change it. */
             if (strcmp(argv[i], "-l") != 0) {
-                printf(_("lls: unknown option `%s'; only -l is accepted.\n"),
+                out_printf(_("lls: unknown option `%s'; only -l is accepted.\n"),
                        argv[i]);
+                cmd_failed(_("unknown option"));
                 return;
             }
         }
@@ -1311,8 +1527,9 @@ static void execute_lls(int argc, const char **argv)
 
     dp = opendir(dir);
     if (dp == NULL) {
-        printf(_("Could not list local directory `%s': %s\n"),
+        out_printf(_("Could not list local directory `%s': %s\n"),
                dir, strerror(errno));
+        cmd_failed(strerror(errno));
         return;
     }
 
@@ -1331,7 +1548,7 @@ static void execute_lls(int argc, const char **argv)
     closedir(dp);
 
     if (count == 0) {
-        printf(_("Local directory `%s' is empty.\n"), dir);
+        out_printf(_("Local directory `%s' is empty.\n"), dir);
         ne_free(names);
         return;
     }
@@ -1343,10 +1560,11 @@ static void execute_lls(int argc, const char **argv)
         char *path = ne_concat(dir, "/", names[n], NULL);
 
         if (cad_file_info(path, &info) != 0) {
-            printf(_("Error: %-30s %s\n"), names[n], strerror(errno));
+            out_printf(_("Error: %-30s %s\n"), names[n], strerror(errno));
+            cmd_failed(strerror(errno));
         }
         else {
-            printf("%5s   %-29s %10" NE_FMT_NE_OFF_T "  %s\n",
+            out_printf("%5s   %-29s %10" NE_FMT_NE_OFF_T "  %s\n",
                    info.is_dir ? _("Coll:") : "", names[n],
                    info.size, format_time(info.mtime));
         }
@@ -1366,20 +1584,23 @@ static void execute_lcd(const char *p)
     } else {
 	real_path = cad_home_dir();
 	if (!real_path) {
-	    printf(_("Could not determine home directory from environment.\n"));
+	    out_printf(_("Could not determine home directory from environment.\n"));
+            cmd_failed(_("no home directory"));
 	    return;
 	}
     }
     if (chdir(real_path)) {
-	printf(_("Could not change local directory:\nchdir: %s\n"),
+	out_printf(_("Could not change local directory:\nchdir: %s\n"),
 	       strerror(errno));
+        cmd_failed(strerror(errno));
     }
 }
 
 static void execute_pwd(void)
 {
     char *uri = ne_uri_unparse(&session.uri);
-    printf(_("Current collection is `%s'.\n"), uri);
+    out_printf(_("Current collection is `%s'.\n"), uri);
+    res_path(uri);
     ne_free(uri);
 }
 
@@ -1389,7 +1610,8 @@ static void execute_cd(const char *native_path)
 
     if (strcmp(native_path, "-") == 0) {
         if (!session.lastwp) {
-            printf(_("No previous collection.\n"));
+            out_printf(_("No previous collection.\n"));
+            cmd_failed(_("no previous collection"));
             return;
         }
         dest_uri_path = session.lastwp;
@@ -1397,7 +1619,13 @@ static void execute_cd(const char *native_path)
     else {
         dest_uri_path = uri_path = uri_resolve_native_coll(native_path);
     }
+    /* An operation with no announcement: `cd' prints nothing when it
+     * works, but it does make a request, and --json has to be able to
+     * say which one. */
+    out_start_raw("%s", "");
+
     if (set_path(dest_uri_path) == 0) {
+        out_done();
         /* Success */
         if (dest_uri_path == uri_path) {
             ne_free(session.lastwp);
@@ -1406,7 +1634,8 @@ static void execute_cd(const char *native_path)
         session.uri.path = dest_uri_path;
     }
     else {
-        /* Failure case, nothing else to do. */
+        /* set_path() has already said why. */
+        out_failed(ne_get_error(session.sess));
         if (uri_path) ne_free(uri_path);
     }
 }
@@ -1421,16 +1650,16 @@ static void display_help_message(void)
      * carriage return when the last row was short, which ran the
      * aliases line into the last command on a terminal and left a stray
      * CR in a redirected transcript. */
-    printf("Available commands: ");
+    out_printf("Available commands: ");
 
     for (n = 0; commands[n].id != cmd_unknown; n++) {
-        if (n % 7 == 0) printf("\n ");
-        printf("%-11s", commands[n].name);
+        if (n % 7 == 0) out_printf("\n ");
+        out_printf("%-11s", commands[n].name);
     }
 
-    putchar('\n');
+    out_putchar('\n');
 
-    printf(_("Aliases: rm=delete, mkdir=mkcol, mv=move, cp=copy, "
+    out_printf(_("Aliases: rm=delete, mkdir=mkcol, mv=move, cp=copy, "
 	     "more=less, quit=exit=bye\n"));
 }
 
@@ -1442,12 +1671,13 @@ static void execute_help(const char *arg)
 	const struct command *cmd = get_command(arg);
 
 	if (cmd) {
-	    printf(_(" `%s'   %s\n"), cmd->call, _(cmd->short_help));
+	    out_printf(_(" `%s'   %s\n"), cmd->call, _(cmd->short_help));
 	    if (cmd->needs_connection) {
-		printf(_("This command can only be used when connected to a server.\n"));
+		out_printf(_("This command can only be used when connected to a server.\n"));
 	    }
 	} else {
-	    printf(_("Command name not known: %s\n"), arg);
+	    out_printf(_("Command name not known: %s\n"), arg);
+            cmd_failed(_("no such command"));
 	}
     }
 }
@@ -1456,16 +1686,16 @@ static void execute_echo(int count, const char **args)
 {
     const char **pnt;
     for(pnt = args; *pnt != NULL; pnt++) {
-	printf("%s ", *pnt);
+	out_printf("%s ", *pnt);
     }
-    putchar('\n');
+    out_putchar('\n');
 }
 
 void execute_about(void)
 {
-    printf("cadaver " PACKAGE_VERSION "\n%s\n", ne_version_string());
+    out_printf("cadaver " PACKAGE_VERSION "\n%s\n", ne_version_string());
 #ifdef HAVE_LIBREADLINE
-    printf("readline %s\n", rl_library_version);
+    out_printf("readline %s\n", rl_library_version);
 #endif
 }
 
@@ -1490,13 +1720,13 @@ void execute_about(void)
 
 /* C1: connected, 1-arg function C2: connected, 2-arg function
  * U0: disconnected, 0-arg function. */
-#define C1(x,c,h) { cmd_##x, #x, true, 1, 1, parmscope_remote, T1(execute_##x),c,h }
-#define C2(x,c,h) { cmd_##x, #x, true, 2, 2, parmscope_remote, T2(execute_##x),c,h }
-#define U0(x,h) { cmd_##x, #x, false, 0, 0, parmscope_none, T0(execute_##x),#x,h }
-#define UO1(x,c,h) { cmd_##x, #x, false, 0, 1, parmscope_none, T1(execute_##x),c,h }
-#define C2M(x,c,h) { cmd_##x, #x, true, 2, CMD_VARY, parmscope_remote, TV(multi_##x),c,h }
-#define C2M(x,c,h) { cmd_##x, #x, true, 2, CMD_VARY, parmscope_remote, TV(multi_##x),c,h }
-#define C1M(x,c,h) { cmd_##x, #x, true, 1, CMD_VARY, parmscope_remote, TV(multi_##x),c,h }
+#define C1(x,c,h) { cmd_##x, #x, true, 1, 1, parmscope_remote, "r", T1(execute_##x),c,h }
+#define C2(x,c,h) { cmd_##x, #x, true, 2, 2, parmscope_remote, "r", T2(execute_##x),c,h }
+#define U0(x,h) { cmd_##x, #x, false, 0, 0, parmscope_none, "", T0(execute_##x),#x,h }
+#define UO1(x,c,h) { cmd_##x, #x, false, 0, 1, parmscope_none, "n", T1(execute_##x),c,h }
+#define C2M(x,c,h) { cmd_##x, #x, true, 2, CMD_VARY, parmscope_remote, "r", TV(multi_##x),c,h }
+#define C2M(x,c,h) { cmd_##x, #x, true, 2, CMD_VARY, parmscope_remote, "r", TV(multi_##x),c,h }
+#define C1M(x,c,h) { cmd_##x, #x, true, 1, CMD_VARY, parmscope_remote, "r", TV(multi_##x),c,h }
 
 /* commands[] is not static because it would mean adding a bunch of
  * prototypes for execute_* etc, and declaring this at the top of the
@@ -1505,19 +1735,19 @@ void execute_about(void)
 /* Separate structures for commands and command names. */
 /* DON'T FORGET TO ADD A NEW COMMAND ALIAS WHEN YOU ADD A NEW COMMAND */
 const struct command commands[] = {
-    { cmd_ls, "ls", true, 0, 1, parmscope_remote, T1(execute_ls), 
+    { cmd_ls, "ls", true, 0, 1, parmscope_remote, "r", T1(execute_ls), 
       N_("ls [path]"), N_("List contents of current [or other] collection") },
     C1(cd, N_("cd path"), N_("Change to specified collection")),
-    { cmd_pwd, "pwd", true, 0, 0, parmscope_none, T0(execute_pwd),
+    { cmd_pwd, "pwd", true, 0, 0, parmscope_none, "", T0(execute_pwd),
       "pwd", N_("Display name of current collection") },
-    { cmd_put, "put", true, 1, 2, parmscope_none, T2(execute_put),
+    { cmd_put, "put", true, 1, 2, parmscope_none, "lr", T2(execute_put),
       N_("put local [remote]"), N_("Upload local file") },
-    { cmd_get, "get", true, 1, 2, parmscope_none, T2(execute_get),
+    { cmd_get, "get", true, 1, 2, parmscope_none, "rl", T2(execute_get),
       N_("get remote [local]"), N_("Download remote resource") },
-    { cmd_resumeget, "resumeget", true, 1, 2, parmscope_none, T2(execute_resumeget),
+    { cmd_resumeget, "resumeget", true, 1, 2, parmscope_none, "rl", T2(execute_resumeget),
       N_("resumeget remote [local]"), N_("Resume download of remote resource") },
     C1M(mget, N_("mget remote..."), N_("Download many remote resources")),
-    { cmd_mput, "mput", true, 1, CMD_VARY, parmscope_local, TV(multi_mput), 
+    { cmd_mput, "mput", true, 1, CMD_VARY, parmscope_local, "l", TV(multi_mput), 
       N_("mput local..."), N_("Upload many local files") },
     C1(edit, N_("edit resource"), N_("Edit given resource")),
     C1(head, N_("head remote"), N_("Show resource metadata")),
@@ -1538,7 +1768,7 @@ const struct command commands[] = {
     C1(unlock, N_("unlock resource"), N_("Unlock given resource")),
     C1(discover, N_("discover resource"), N_("Display lock information for resource")),
     C1(steal, N_("steal resource"), N_("Steal lock token for resource")),
-    { cmd_showlocks, "showlocks", true, 0, 0, parmscope_none, T0(execute_showlocks),
+    { cmd_showlocks, "showlocks", true, 0, 0, parmscope_none, "", T0(execute_showlocks),
       "showlocks", N_("Display list of owned locks") },
 
     /*** DeltaV commands ***/
@@ -1548,7 +1778,7 @@ const struct command commands[] = {
     C1(uncheckout, N_("uncheckin resource"), N_("Uncheckout given resource")),
     C1(history, N_("history resource"), N_("Show version history of resource")),
 
-    { cmd_label, "label", true, 3, 3, parmscope_none, T3(execute_label),
+    { cmd_label, "label", true, 3, 3, parmscope_none, "rnn", T3(execute_label),
       N_("label res [add|set|remove] labelname"),
       N_("Set/Del/Edit label on resource") },
 
@@ -1556,20 +1786,20 @@ const struct command commands[] = {
     /*** Property handling ***/
     C1(propnames, "propnames res", N_("Names of properties defined on resource")) ,
 
-    { cmd_chexec, "chexec", true, 2, 2, parmscope_none, T2(execute_chexec),
+    { cmd_chexec, "chexec", true, 2, 2, parmscope_none, "nr", T2(execute_chexec),
       N_("chexec [+|-] remote"), N_("Change isexecutable property of resource") },
     
-    { cmd_propget, "propget", true, 1, 2, parmscope_none, T2(execute_propget),
+    { cmd_propget, "propget", true, 1, 2, parmscope_none, "rn", T2(execute_propget),
       N_("propget res [propname]"), 
       N_("Retrieve properties of resource") },
-    { cmd_propdel, "propdel", true, 2, 2, parmscope_none, T2(execute_propdel),
+    { cmd_propdel, "propdel", true, 2, 2, parmscope_none, "rn", T2(execute_propdel),
       N_("propdel res propname"), 
       N_("Delete property from resource") },
-    { cmd_propset, "propset", true, 3, 3, parmscope_none, T3(execute_propset),
+    { cmd_propset, "propset", true, 3, 3, parmscope_none, "rnn", T3(execute_propset),
       N_("propset res propname value"),
       N_("Set property on resource") },
 
-    { cmd_search, "search", true, 1, CMD_VARY, parmscope_remote, TV(execute_search),
+    { cmd_search, "search", true, 1, CMD_VARY, parmscope_remote, "n", TV(execute_search),
       N_("search query"), 
       N_("DASL Search resource in current collection\n\n"
 	 " Examples:\n"
@@ -1581,28 +1811,29 @@ const struct command commands[] = {
 	 "     - and, or , (, ), =, <, >, <=, >=, like\n"
          " (See also variables searchdepth, searchorder, searchdorder)\n") },
     
-    { cmd_set, "set", false, 0, 2, parmscope_none, T2(execute_set), 
+    { cmd_set, "set", false, 0, 2, parmscope_none, "on", T2(execute_set), 
       N_("set [option] [value]"), N_("Set an option, or display options") },
-    { cmd_open, "open", false, 1, 1, parmscope_none, T1(open_connection), 
+    { cmd_open, "open", false, 1, 1, parmscope_none, "n", T1(open_connection), 
       "open URL", N_("Open connection to given URL") },
-    { cmd_close, "close", true, 0, 0, parmscope_none, T0(close_connection), 
+    { cmd_close, "close", true, 0, 0, parmscope_none, "", T0(close_connection), 
       "close", N_("Close current connection") },
-    { cmd_echo, "echo", false, 1, CMD_VARY, parmscope_remote, TV(execute_echo), 
+    { cmd_echo, "echo", false, 1, CMD_VARY, parmscope_remote, "n", TV(execute_echo), 
       "echo", NULL },
-    { cmd_quit, "quit", false, 0, 1, parmscope_none, T1(NULL), "quit",
+    { cmd_quit, "quit", false, 0, 1, parmscope_none, "", T1(NULL), "quit",
       N_("Exit program") },
     /* Unconnected operation, 1 mandatory argument */
-    { cmd_unset, "unset", false, 1, 2, parmscope_none, T2(execute_unset), 
+    { cmd_unset, "unset", false, 1, 2, parmscope_none, "on", T2(execute_unset), 
       N_("unset [option] [value]"), N_("Unsets or clears value from option.") },
     /* Unconnected operation, 0 arguments */
-    UO1(lcd, N_("lcd [directory]"), N_("Change local working directory")), 
-    { cmd_lls, "lls", false, 0, CMD_VARY, parmscope_local, TV(execute_lls), 
+    { cmd_lcd, "lcd", false, 0, 1, parmscope_none, "l", T1(execute_lcd),
+      N_("lcd [directory]"), N_("Change local working directory") },
+    { cmd_lls, "lls", false, 0, CMD_VARY, parmscope_local, "l", TV(execute_lls), 
       N_("lls [options]"), N_("Display local directory listing") },
     U0(lpwd, N_("Print local working directory")),
-    { cmd_logout, "logout", true, 0, 0, parmscope_none, T0(execute_logout), "logout",
+    { cmd_logout, "logout", true, 0, 0, parmscope_none, "", T0(execute_logout), "logout",
       N_("Logout of authentication session") },
     UO1(help, N_("help [command]"), N_("Display help message")), 
-    { cmd_describe, "describe", false, 1, 1, parmscope_none, T1(execute_describe),
+    { cmd_describe, "describe", false, 1, 1, parmscope_none, "o", T1(execute_describe),
       "describe option", N_("Describe an option variable") },
     U0(about, N_("Information about this version of cadaver") ),
 

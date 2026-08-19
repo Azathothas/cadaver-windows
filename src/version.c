@@ -360,7 +360,7 @@ static int display_report_results(report_ctx * rctx)
 	return rctx->err_code;
     }
 
-    printf(_(" %d version%s in history:\n"), rctx->result_num,
+    out_printf(_(" %d version%s in history:\n"), rctx->result_num,
            rctx->result_num==1?"":"s");
 
     for (res = rctx->root; res; res = res->next) {
@@ -368,7 +368,7 @@ static int display_report_results(report_ctx * rctx)
 	  ne_httpdate_parse(res->getlastmodified) : 0;
 	int size = res->getcontentlength ? atol(res->getcontentlength) : 0;
 	
-	printf("%-40s %10d  %s <%s>\n", res->href,
+	out_printf("%-40s %10d  %s <%s>\n", res->href,
 	       size, format_time(modtime), res->version_name);
     }
 
@@ -450,7 +450,8 @@ void execute_label(const char *native_path, const char *act, const char *value)
 
     if (strcasecmp(act, "add") && strcasecmp(act, "remove") &&
         strcasecmp(act, "set")) {
-        printf(_("Invalid action `%s' given.\n"), act);
+        out_printf(_("Invalid action `%s' given.\n"), act);
+        cmd_failed(_("the action must be add, set or remove"));
         return;
     }
 
