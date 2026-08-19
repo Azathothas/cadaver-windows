@@ -1468,12 +1468,29 @@ static int mkcol_existing_ok(const char *uri_path)
     ret = ne_mkcol(session.sess, uri_path);
     status = req_last_status();
 
-    if (ret != NE_OK && status == 405) {
-        out_success_as(_("it is already there.\n"));
+    if (ret == NE_OK) {
+        out_success();
         return 1;
     }
 
-    return out_handle(ret);
+    /* RFC 4918 section 9.3.1: MKCOL answers 405 for a URL that is
+     * already mapped.  That is not the same as "a collection is already
+     * there" -- a plain resource under the name gives the same status,
+     * and uploading into one would fail per file with nothing having
+     * said why.  So ask what it is. */
+    if (status == 405) {
+        if (getrestype(uri_path) == resr_collection) {
+            out_success_as(_("it is already there.\n"));
+            return 1;
+        }
+
+        out_fail(_("something is already there, and it is not a "
+                   "collection.\n"));
+        return 0;
+    }
+
+    out_result(ret);
+    return 0;
 }
 
 /* Uploads the local directory `local' into the collection `uri_dest',

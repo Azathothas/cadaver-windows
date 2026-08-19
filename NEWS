@@ -10,6 +10,9 @@ Changes in version 0.28-win3:
   a plain resource does what `get' or `put' would have done.  Both
   refuse to go more than 64 levels deep, so a junction or a symbolic
   link that makes a directory contain itself is not walked forever.
+  A MKCOL that comes back 405 means the URL is already mapped, which is
+  not the same as a collection being there: `rput' asks what it is, and
+  says so when it turns out to be a plain resource.
 * Ctrl-C during a transfer abandons it and returns to the prompt.  It
   used to end the process, which during an upload leaves the server
   holding half a resource and no indication that anything went wrong.

@@ -31,6 +31,10 @@ Downloading `uploaded/hello.txt' to `one-file.txt': [28 bytes] succeeded.
 Uploading hello.txt to `/recurse/uploaded/one-file.txt': [28 bytes] succeeded.
 Creating `/recurse/nosuchparent/uploaded/': failed:
 409 Conflict
+Uploading hello.txt to `/recurse/blocked': [28 bytes] succeeded.
+Creating `/recurse/blocked/': failed:
+something is already there, and it is not a collection.
+Deleting `/recurse/blocked': succeeded.
 Deleting collection `/recurse/uploaded/': succeeded.
 Connection to `127.0.0.1' closed.
--- cadaver exited 1 --
+-- cadaver exited 2 --

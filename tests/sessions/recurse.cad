@@ -17,5 +17,12 @@ rput hello.txt uploaded/one-file.txt
 # A collection whose parent does not exist cannot be created, and
 # nothing under it is tried.
 rput . nosuchparent/uploaded
+# MKCOL answers 405 for any URL that is already mapped, which is not
+# the same as a collection being already there: a plain resource
+# under the name gives the same status, and uploading into one would
+# fail per file with nothing having said why.
+put hello.txt blocked
+rput . blocked
+delete blocked
 rmcol uploaded
 quit
