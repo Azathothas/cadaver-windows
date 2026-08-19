@@ -120,8 +120,8 @@ make -f Makefile.w32 STATIC=1
 
 That links the libraries in statically, so the result depends only on
 DLLs that ship with Windows. This is how the released binaries are
-built. It is correspondingly larger: 10218775 bytes (9.7 MiB) against
-1607929 bytes (1.5 MiB) dynamically linked, measured against OpenSSL
+built. It is correspondingly larger: 10225021 bytes (9.8 MiB) against
+1613151 bytes (1.5 MiB) dynamically linked, measured against OpenSSL
 3.6.3, expat 2.8.1 and readline 8.3. Expect a different exact figure
 from a different toolchain.
 

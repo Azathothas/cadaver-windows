@@ -9,7 +9,7 @@
 # ends in a slash; a fresh one is made under it for every session, so
 # one session cannot leave anything behind that another trips over.
 #
-# A session is tests/sessions/NAME.cad, and may bring four more files:
+# A session is tests/sessions/NAME.cad, and may bring five more files:
 #
 #   NAME.flags    extra arguments for the cadaver command line, one per
 #                 line, so that a session can be run with --json or
@@ -28,8 +28,10 @@
 #                 transcript cannot show or has had replaced.  $PYTHON
 #                 is an interpreter
 #
-# All four go through tests/expand.py, so @WORK@ and @EDITOR@ mean the
-# same in them as in the session script.
+# The script, the flags, the home and the stdin go through
+# tests/expand.py, so @WORK@ and @EDITOR@ mean the same in all four.
+# The servers list and the check do not: one holds names and the other
+# is shell, which has $WORK already.
 #
 # NAME selects the directory of expected output, tests/expected/NAME,
 # because the two test servers legitimately disagree: x/net/webdav has
