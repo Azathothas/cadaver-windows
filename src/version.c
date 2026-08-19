@@ -486,9 +486,15 @@ void execute_label(const char *native_path, const char *act, const char *value)
 		      "<?xml version=\"1.0\" encoding=\"utf-8\" ?>\n"
 		      "<D:label xmlns:D=\"DAV:\">\n");
     
-    /* Adction */
-    ne_buffer_concat(label_body, "<D:", act, "><D:label-name>", value, 
-		     "</D:label-name></D:", act, ">", NULL);
+    /* The action is one of three words, checked above.  The label is
+     * whatever was typed, and goes into an element: an ampersand or an
+     * angle bracket in it made the body ill-formed and the server
+     * answer 400.  Upstream issue #64 is the same defect in `set
+     * lockowner'; neon has no escaping helper to call, so cadaver
+     * hands it something that is already well-formed. */
+    ne_buffer_concat(label_body, "<D:", act, "><D:label-name>", NULL);
+    xml_escape(label_body, value);
+    ne_buffer_concat(label_body, "</D:label-name></D:", act, ">", NULL);
     ne_buffer_zappend(label_body,
 		      "</D:label>\n");
     

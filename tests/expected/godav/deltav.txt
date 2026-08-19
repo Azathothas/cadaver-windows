@@ -45,6 +45,11 @@ Labelling `/deltav/hello.txt': failed:
 409 Conflict
 Labelling `hello.txt': failed:
 `sideways' is not an action; give add, set or remove.
+Labelling `/deltav/hello.txt': succeeded.
+Using query: displayname = a&b: succeeded.
+Found no results.
+Using query: displayname like %.txt: failed:
+`x&y' in searchorder is not a property name
 Checking out `/deltav/hello.txt': succeeded.
 Cancelling check out of `/deltav/hello.txt': succeeded.
 Cancelling check out of `/deltav/hello.txt': failed:
@@ -52,4 +57,4 @@ Cancelling check out of `/deltav/hello.txt': failed:
 Checking out `/deltav/second.txt': failed:
 403 Forbidden
 Connection to `127.0.0.1' closed.
--- cadaver exited 7 --
+-- cadaver exited 8 --

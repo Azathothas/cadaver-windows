@@ -213,6 +213,27 @@ static int quoted_string(char **string_parsed, ne_buffer * result_buf);
 static int comparison_value(char **string_parsed, ne_buffer * result_buf);
 static int word_string(char **string_parsed, ne_buffer * result_buf);
 
+/* Whether `name' can be written as an XML element name.
+ *
+ * A property name in a search query becomes one -- <D:getcontentlength/>
+ * -- so it cannot be escaped, only refused.  `search a<b = 1' produced a
+ * request body no parser accepts, and so did `set searchorder' with the
+ * same in it.  The set below is what a property name actually uses; a
+ * colon is left out so that a namespace prefix cannot be smuggled in. */
+static int is_xml_name(const char *name)
+{
+    const char *p;
+
+    if (name == NULL || *name == '\0') return 0;
+    if (!isalpha((unsigned char)*name) && *name != '_') return 0;
+
+    for (p = name; *p != '\0'; p++)
+        if (!isalnum((unsigned char)*p) && strchr("-_.", *p) == NULL)
+            return 0;
+
+    return 1;
+}
+
 /* Set xml parser error */
 static void set_xml_error(search_ctx *sctx, const char *format, ...)
 {
@@ -721,6 +742,11 @@ static int search_select_gen(const ne_propname * props,
     ne_buffer_zappend(basic_search, "<D:select><D:prop>" EOL);
 
     for (n = 0; props[n].name != NULL; n++) {
+	if (!is_xml_name(props[n].name)) {
+	    ne_set_error(session.sess,
+			 _("`%s' is not a property name"), props[n].name);
+	    return NE_ERROR;
+	}
 	ne_buffer_concat(basic_search, "<", props[n].name, " xmlns=\"",
 			 NSPACE(props[n].nspace), "\"/>" EOL, NULL);
     }
@@ -830,6 +856,11 @@ static int search_orderby_gen(const ne_propname * asc,
     ne_buffer_zappend(basic_search, "<D:orderby>" EOL);
 
     for (n = 0; asc && asc[n].name != NULL; n++) {
+	if (!is_xml_name(asc[n].name)) {
+	    ne_set_error(session.sess, _("`%s' in searchorder is not a "
+					"property name"), asc[n].name);
+	    return NE_ERROR;
+	}
 	ne_buffer_zappend(basic_search, "<D:order><D:prop>" EOL);
 	ne_buffer_concat(basic_search, "<", asc[n].name, " xmlns=\"",
 			 NSPACE(asc[n].nspace), "\"/>" EOL, NULL);
@@ -838,6 +869,11 @@ static int search_orderby_gen(const ne_propname * asc,
     }
 
     for (n = 0; des && des[n].name != NULL; n++) {
+	if (!is_xml_name(des[n].name)) {
+	    ne_set_error(session.sess, _("`%s' in searchdorder is not a "
+					"property name"), des[n].name);
+	    return NE_ERROR;
+	}
 	ne_buffer_zappend(basic_search, "<D:order><D:prop>" EOL);
 	ne_buffer_concat(basic_search, "<", des[n].name, " xmlns=\"",
 			 NSPACE(des[n].nspace), "\"/>" EOL, NULL);
@@ -1404,15 +1440,21 @@ static int predicate(char **string_parsed, ne_buffer * result_buf)
 	}
     }
 
-    ne_buffer_concat(result_buf, "<D:",
-		     XML_operator,
-		     ">" EOL
-		     "<D:prop><D:",
-		     column_name,
-		     "/></D:prop>" EOL
-		     "<D:literal>",
-		     comparing_value->data,
-		     "</D:literal>" EOL "</D:", XML_operator, ">" EOL, NULL);
+    /* The property name becomes an element name and can only be
+     * refused; the value goes into an element and is escaped. */
+    if (!is_xml_name(column_name)) {
+	ne_set_error(session.sess,
+		     _("`%s' is not a property name"), column_name);
+	ne_buffer_destroy(comparing_value);
+	return NE_ERROR;
+    }
+
+    ne_buffer_concat(result_buf, "<D:", XML_operator, ">" EOL
+		     "<D:prop><D:", column_name, "/></D:prop>" EOL
+		     "<D:literal>", NULL);
+    xml_escape(result_buf, comparing_value->data);
+    ne_buffer_concat(result_buf, "</D:literal>" EOL
+		     "</D:", XML_operator, ">" EOL, NULL);
 
     ne_buffer_destroy(comparing_value);
 

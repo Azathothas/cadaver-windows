@@ -33,6 +33,16 @@ label hello.txt set final
 label hello.txt remove final
 label hello.txt remove final
 label hello.txt sideways final
+# A label goes into an element, so markup in it has to be escaped
+# or the body is not well-formed and the server answers 400.  Same
+# defect as upstream #64, which was about the lock owner.
+label hello.txt add "a&b<c>d"
+# And a search literal, which goes into <D:literal>.
+search displayname = "a&b"
+# A property name becomes an element name and can only be refused.
+set searchorder "x&y"
+search displayname like %.txt
+unset searchorder
 # Cancelling a checkout puts the body back.
 checkout hello.txt
 uncheckout hello.txt
