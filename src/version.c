@@ -314,10 +314,13 @@ static void simple_request(const char *native_path, const char *verb,
     ne_request *req;
     int ret;
 
-    if (native_path)
-        uri_path = uri_resolve_native_coll(native_path);
-    else
-        uri_path = ne_strdup(native_path);
+    /* Not uri_resolve_native_coll(): that puts a trailing slash on
+     * every path, and DeltaV is nearly always applied to a plain
+     * resource, where /x/ and /x are different resources and the second
+     * is the one meant.  uri_resolve_native_true() adds the slash only
+     * where the resource really is a collection.  Nothing caught this,
+     * because no test server implemented any of these methods. */
+    uri_path = uri_resolve_native_true(native_path, NULL);
 
     out_start_uri(verb, uri_path);
 
@@ -359,9 +362,6 @@ static int display_report_results(report_ctx * rctx)
     if (rctx->err_code) {
 	return rctx->err_code;
     }
-
-    out_printf(_(" %d version%s in history:\n"), rctx->result_num,
-           rctx->result_num==1?"":"s");
 
     for (res = rctx->root; res; res = res->next) {
 	long modtime = res->getlastmodified ?
@@ -419,20 +419,33 @@ void execute_history(const char *native_path)
     report_ctx *rctx = ne_calloc(sizeof(report_ctx));
     rctx->cdata = ne_buffer_create();
 
-    if (native_path)
-        uri_path = uri_resolve_native_coll(native_path);
-    else
-        uri_path = ne_strdup(native_path);
+    /* Not uri_resolve_native_coll(): that puts a trailing slash on
+     * every path, and DeltaV is nearly always applied to a plain
+     * resource, where /x/ and /x are different resources and the second
+     * is the one meant.  uri_resolve_native_true() adds the slash only
+     * where the resource really is a collection.  Nothing caught this,
+     * because no test server implemented any of these methods. */
+    uri_path = uri_resolve_native_true(native_path, NULL);
 
     out_start_uri(_("Version history of"), uri_path);
-    
+
     /* Run search */
     ret = do_report(uri_path, rctx);
     if (ret != NE_OK) {
 	/* Print out error message */
 	out_result(ret);
     } else {
-        /* show report result */
+        /* The count is the answer, so it goes where "succeeded."
+         * would.  The operation used to be left open: nothing
+         * closed it, so the record carried a duration measured
+         * from the start of the command and no outcome at all. */
+        char summary[64];
+
+        ne_snprintf(summary, sizeof summary,
+                    _("%d version%s in history:\n"),
+                    rctx->result_num,
+                    rctx->result_num == 1 ? "" : "s");
+        out_success_as(summary);
 	display_report_results(rctx);
     }
 
@@ -450,15 +463,18 @@ void execute_label(const char *native_path, const char *act, const char *value)
 
     if (strcasecmp(act, "add") && strcasecmp(act, "remove") &&
         strcasecmp(act, "set")) {
-        out_printf(_("Invalid action `%s' given.\n"), act);
-        cmd_failed(_("the action must be add, set or remove"));
+        out_start(_("Labelling"), native_path);
+        out_fail(_("`%s' is not an action; give add, set or remove.\n"), act);
         return;
     }
 
-    if (native_path)
-        uri_path = uri_resolve_native_coll(native_path);
-    else
-        uri_path = ne_strdup(native_path);
+    /* Not uri_resolve_native_coll(): that puts a trailing slash on
+     * every path, and DeltaV is nearly always applied to a plain
+     * resource, where /x/ and /x are different resources and the second
+     * is the one meant.  uri_resolve_native_true() adds the slash only
+     * where the resource really is a collection.  Nothing caught this,
+     * because no test server implemented any of these methods. */
+    uri_path = uri_resolve_native_true(native_path, NULL);
 
     out_start_uri(_("Labelling"), uri_path);
 

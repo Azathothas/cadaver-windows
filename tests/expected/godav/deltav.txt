@@ -1,0 +1,55 @@
+Uploading hello.txt to `/deltav/hello.txt': [28 bytes] succeeded.
+Uploading second.txt to `/deltav/second.txt': [16 bytes] succeeded.
+Creating `sub': succeeded.
+Uploading every-byte.dat to `/deltav/sub/every-byte.dat': [256 bytes] succeeded.
+Using query: getcontentlength < 20: succeeded.
+Found 2 results (1-2)
+
+[1] /deltav/sub/                                       0  <DATE> <httpd/unix-directory>
+[2] /deltav/second.txt                                16  <DATE> <text/plain>
+Using query: displayname like %.txt: succeeded.
+Found 2 results (1-2)
+
+[1] /deltav/second.txt                                16  <DATE> <text/plain>
+[2] /deltav/hello.txt                                 28  <DATE> <text/plain>
+Using query: getcontentlength > 20 and displayname like %byte%: succeeded.
+Found 1 result (1-1)
+
+[1] /deltav/sub/every-byte.dat                       256  <DATE> <application/octet-stream>
+Using query: getcontentlength > 1000000: succeeded.
+Found no results.
+Using query: displayname like %byte%: succeeded.
+Found no results.
+Using query: displayname like %byte%: succeeded.
+Found 1 result (1-1)
+
+[1] /deltav/sub/every-byte.dat                       256  <DATE> <application/octet-stream>
+Version history of `/deltav/hello.txt': failed:
+403 Forbidden
+Versioning `/deltav/hello.txt': succeeded.
+Version history of `/deltav/hello.txt': 1 version in history:
+/deltav/hello.txt?version=1                      28  <DATE> <1>
+Checking out `/deltav/hello.txt': succeeded.
+Checking out `/deltav/hello.txt': failed:
+409 Conflict
+Checking in `/deltav/hello.txt': succeeded.
+Version history of `/deltav/hello.txt': 2 versions in history:
+/deltav/hello.txt?version=2                      28  <DATE> <2>
+/deltav/hello.txt?version=1                      28  <DATE> <1>
+Labelling `/deltav/hello.txt': succeeded.
+Labelling `/deltav/hello.txt': failed:
+409 Conflict
+Labelling `/deltav/hello.txt': succeeded.
+Labelling `/deltav/hello.txt': succeeded.
+Labelling `/deltav/hello.txt': failed:
+409 Conflict
+Labelling `hello.txt': failed:
+`sideways' is not an action; give add, set or remove.
+Checking out `/deltav/hello.txt': succeeded.
+Cancelling check out of `/deltav/hello.txt': succeeded.
+Cancelling check out of `/deltav/hello.txt': failed:
+409 Conflict
+Checking out `/deltav/second.txt': failed:
+403 Forbidden
+Connection to `127.0.0.1' closed.
+-- cadaver exited 7 --

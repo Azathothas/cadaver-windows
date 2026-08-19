@@ -195,6 +195,11 @@ func main() {
 		LockSystem: webdav.NewMemLS(),
 	}
 
+	// DeltaV and DASL, which x/net/webdav does not implement, so that
+	// cadaver's `search' and its version commands have something to
+	// talk to.  See deltav.go.
+	h = newDeltavHandler(h, *dir)
+
 	if *slowPrefix != "" {
 		h = &slowHandler{
 			next:   h,

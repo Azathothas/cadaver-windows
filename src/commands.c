@@ -314,8 +314,8 @@ char *getowner(void)
  * collection.  If 'type' is non-NULL, *type is set to what the resource
  * turned out to be -- resr_error meaning it could not be found, which
  * is not the same as its being a plain resource. */
-static char *uri_resolve_native_true(const char *path,
-                                     enum resource_type *type)
+char *uri_resolve_native_true(const char *path,
+                              enum resource_type *type)
 {
     char *uri_path = uri_resolve_native(path);
     enum resource_type restype = getrestype(uri_path);

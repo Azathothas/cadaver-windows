@@ -435,6 +435,14 @@ static int display_results(search_ctx * sctx)
 	return sctx->err_code;
     }
 
+    if (sctx->result_num == 0) {
+        /* A search that matched nothing used to print nothing at
+         * all, so it read as though the results were missing
+         * rather than absent. */
+        out_puts_line(_("Found no results."));
+        return sctx->err_code;
+    }
+
     for (i=1, res = sctx->root; res; res = res->next, i++) {
 	long modtime = res->getlastmodified ?
 	    ne_httpdate_parse(res->getlastmodified) : 0;
@@ -442,13 +450,13 @@ static int display_results(search_ctx * sctx)
 	char exec_char = ' ';
 
 	if (i%RESULT_PER_PAGE ==1) {
-	    out_printf("Found %d results (%d-%d)\n\n", 
-		   sctx->result_num, i, 
+	    out_printf(_("Found %d result%s (%d-%d)\n\n"),
+		   sctx->result_num, sctx->result_num == 1 ? "" : "s", i,
 		   sctx->result_num<i+9?sctx->result_num:i+9);
 	}
 
-	out_printf("[%d] %-40s%c %10d  %s <%.10s>\n", i, res->href, exec_char,
-	       size, format_time(modtime), 
+	out_printf("[%d] %-40s%c %10d  %s <%s>\n", i, res->href, exec_char,
+	       size, format_time(modtime),
 	       res->getcontenttype?res->getcontenttype:"");
 
 	for (dprop = res->root;
@@ -647,6 +655,7 @@ void execute_search(int count, const char **args)
 {
     int ret;
     const char **pnt;
+    char *shown;
     ne_buffer *query = ne_buffer_create();
  
     search_ctx *sctx = ne_calloc(sizeof(search_ctx));
@@ -663,16 +672,26 @@ void execute_search(int count, const char **args)
 	    ne_buffer_concat(query, *pnt, " ", NULL);
     }
 
-    out_printf(_("Using query: "));
-    out_printf("%s, ", query->data);
+    /* The query as it was understood, so that a transcript shows what
+     * was actually asked for.  The operation is opened here rather than
+     * left unopened: out_result() below used to end one that had never
+     * begun, so the request the search made was recorded against
+     * nothing. */
+    shown = ne_strdup(query->data);
+    out_start_raw(_("Using query: %s:"), ne_shave(shown, " "));
+    ne_free(shown);
 
     /* Run search and get data to sctx */
     ret = run_search(session.sess, session.uri.path, searchdepth, query, sctx);
+
+    /* The outcome first and the results after it, the way `ls' does it,
+     * so that a transcript can be read by looking at the end of the
+     * line the command announced itself on. */
+    out_result(ret);
+
     if (ret == NE_OK) {
 	display_results(sctx);
     }
-
-    out_result(ret);
 
     search_ctx_destroy(sctx);
     ne_buffer_destroy(query);

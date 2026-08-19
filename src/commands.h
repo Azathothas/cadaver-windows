@@ -68,6 +68,15 @@ char *uri_resolve_native(const char *native);
  * slash. */
 char *uri_resolve_native_coll(const char *native);
 
+/* Converts a native path to a URI path, adding the trailing slash
+ * only where the resource turns out to be a collection.  Costs one
+ * PROPFIND, which the per-command cache in src/utils.c usually
+ * answers.  `type' is filled in with what the resource turned out
+ * to be when it is not NULL; resr_error means it was not found,
+ * which is not the same as its being a plain resource. */
+char *uri_resolve_native_true(const char *native,
+                              enum resource_type *type);
+
 /* Displays cadaver version details. */
 void execute_about(void);
 

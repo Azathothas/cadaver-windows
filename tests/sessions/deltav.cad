@@ -1,0 +1,42 @@
+# DASL search and the DeltaV commands, which no test server implemented
+# until tests/godav/deltav.go, so cadaver's code for them was compiled,
+# linked and never run.  See deltav.servers: only the Go server answers
+# any of this.
+lcd @WORK@
+put hello.txt
+put second.txt
+mkcol sub
+put every-byte.dat sub/every-byte.dat
+# Searching.
+search getcontentlength < 20
+search displayname like %.txt
+search getcontentlength > 20 and displayname like %byte%
+search getcontentlength > 1000000
+# A depth of 1 leaves the subcollection out.
+set searchdepth 1
+search displayname like %byte%
+unset searchdepth
+search displayname like %byte%
+# Version control.  Every one of these used to send a trailing slash on
+# the path of a plain resource.
+history hello.txt
+version hello.txt
+history hello.txt
+checkout hello.txt
+checkout hello.txt
+checkin hello.txt
+history hello.txt
+# Labels go on the latest version.
+label hello.txt add draft
+label hello.txt add draft
+label hello.txt set final
+label hello.txt remove final
+label hello.txt remove final
+label hello.txt sideways final
+# Cancelling a checkout puts the body back.
+checkout hello.txt
+uncheckout hello.txt
+uncheckout hello.txt
+# And on a resource that is not under version control.
+checkout second.txt
+quit
