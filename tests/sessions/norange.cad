@@ -1,0 +1,10 @@
+# A server that ignores Range and answers 200 with the whole resource.
+# neon writes the body to the file before it checks the status, so the
+# partial file gains a second complete copy; cadaver has to put it back
+# to the length it had.  tests/godav.sh arranges the misbehaviour; no
+# real server here does it.
+lcd @WORK@
+put every-byte.dat
+resumeget every-byte.dat partial.dat
+lls
+quit

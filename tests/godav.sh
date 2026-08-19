@@ -76,10 +76,16 @@ AUTH_PREFIX=netrc
 AUTH_USER=alice
 AUTH_PASS="p@ss'word"
 
+# And one subtree that ignores Range, for the session that checks what
+# `resumeget' does when a server answers 200 with the whole resource.
+# Without a leading slash, for the same reason as above.
+NORANGE_PREFIX=norange
+
 echo "-- Launching x/net/webdav on port $PORT --"
 "$SERVER" -addr "127.0.0.1:$PORT" -dir "$ABSROOT" \
     -authprefix "$AUTH_PREFIX" -authuser "$AUTH_USER" \
-    -authpass "$AUTH_PASS" > "$OUT/server.log" 2>&1 &
+    -authpass "$AUTH_PASS" -norangeprefix "$NORANGE_PREFIX" \
+    > "$OUT/server.log" 2>&1 &
 SERVER_PID=$!
 
 cleanup() {

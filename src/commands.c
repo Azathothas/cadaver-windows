@@ -1145,7 +1145,12 @@ static void execute_rename(const char *native_src, const char *native_dest)
  * zero-length file that made every retry prompt for a name instead.
  *
  * A resumed download has to append to the file that is already there,
- * so it records the size first and truncates back to it on failure. */
+ * so it records the size first and puts the file back to it if the
+ * request fails.  neon 0.37.1 does not need that -- dispatch_to_fd()
+ * writes to the descriptor only for a 206 and discards anything else --
+ * but "a failed resumeget leaves the local file as it was" is a
+ * guarantee worth keeping here rather than by inspection of a vendored
+ * library that this tree is expected to update. */
 static void do_get(const char *native_remote, const char *native_local, int resume)
 {
     char *filename = NULL, *tmpname = NULL, *uri_path;
@@ -1242,11 +1247,10 @@ static void do_get(const char *native_remote, const char *native_local, int resu
     }
 
     if (ret != NE_OK && resume) {
-        /* ne_get_range() checks that the response was 206 only after
-         * the body has gone to the descriptor, so a server that ignored
-         * the Range header and answered 200 has just appended a whole
-         * second copy of the resource.  Put the file back to the length
-         * it had before the request. */
+        /* Put the file back to the length it had before the request,
+         * whatever the library did with the body.  Normally there is
+         * nothing to do; tests/sessions/norange.cad is the case this is
+         * here for, against a server that ignores Range. */
         if (cad_truncate(fd, resume_from) != 0) {
             out_printf(_("Warning: could not truncate `%s' back to "
                          "%" NE_FMT_NE_OFF_T " bytes: %s\n"),

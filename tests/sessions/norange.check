@@ -1,0 +1,10 @@
+# The resume failed, so the partial file must be exactly as it was: the
+# first hundred bytes of every-byte.dat and nothing appended.
+size=`wc -c < "$WORK/partial.dat" | tr -d ' '`
+if [ "$size" != "100" ]; then
+    echo "partial.dat is $size bytes, expected 100"
+    exit 1
+fi
+
+head -c 100 "$WORK/every-byte.dat" > "$WORK/first-hundred.dat"
+cmp "$WORK/first-hundred.dat" "$WORK/partial.dat"

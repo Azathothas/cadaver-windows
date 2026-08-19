@@ -62,12 +62,14 @@ Changes in version 0.28-win2:
   local file exists: ask, which is the default and what it always did,
   yes to overwrite, or no to refuse and fail.  Asking cannot work in a
   script, where the prompt reads end of input.
-* `resumeget' truncates the local file back to where it started when
-  the request fails.  neon checks that the response was 206 only after
-  the body has gone to the descriptor, so a server that ignored the
-  Range header and answered 200 appended a second complete copy of the
-  resource and cadaver reported an error without saying the file was
-  now wrong.
+* `resumeget' puts the local file back to the length it had when the
+  request fails, so that a server which ignores the Range header and
+  answers 200 with the whole resource cannot leave it longer than it
+  was.  TODO said neon appended a second copy in that case; it does not
+  -- dispatch_to_fd() writes to the descriptor only for a 206 -- and the
+  new `norange' session, which arranges a server that ignores Range,
+  is what established that.  The guarantee is kept here anyway rather
+  than by inspection of a vendored library.
 * `put' and `mput' report a directory as one.  Opening a directory
   gives EACCES on Windows, so `mput *' used to report "Could not open
   file: Permission denied" for each, which was true of neither.
@@ -103,11 +105,14 @@ Changes in version 0.28-win2:
 * Tests:
  - tests/netrc.sh, 26 unit tests for lib/netrc.c.  What that parser
    gets wrong is invisible in use, which is how #75 survived.
- - Eight more scripted sessions: the exit status, --json, --trace,
+ - Nine more scripted sessions: the exit status, --json, --trace,
    `clobber', renaming a collection, a lock owner containing markup,
-   and two that authenticate from a .netrc against a subtree of the Go
-   test server that now requires it -- one with a password holding an
-   apostrophe, one supplying only the login.
+   a server that ignores Range, and two that authenticate from a .netrc
+   against a subtree of the Go test server that now requires it -- one
+   with a password holding an apostrophe, one supplying only the login.
+ - The Go test server can be told to require authentication under one
+   prefix and to ignore Range under another, because no real server
+   here does either and both have to be exercised.
  - Every session pins its exit status on the last line of the
    transcript.
  - A session may bring a .flags file of extra command-line arguments,

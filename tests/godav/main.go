@@ -19,10 +19,16 @@
 // credentials are on the command line and the comparison is a plain
 // one.  It is a test server on the loopback interface.
 //
-// The prefix is given without a leading slash, which is added here.  A
-// leading slash would make it look like an absolute path to the MSYS2
-// and Git Bash argument conversion, which rewrites one into a Windows
-// path before a native program ever sees it.
+// -norangeprefix makes one subtree ignore a Range request and answer
+// with the whole resource, which is what neon's ne_get_range() checks
+// for only after the body has already gone to the file.  No real server
+// here does that, and what it causes is silent corruption of the local
+// file, so it has to be arranged deliberately.
+//
+// Both prefixes are given without a leading slash, which is added here.
+// A leading slash would look like an absolute path to the MSYS2 and Git
+// Bash argument conversion, which rewrites one into a Windows path
+// before a native program ever sees it.
 package main
 
 import (
@@ -39,6 +45,23 @@ type authHandler struct {
 	next              http.Handler
 	prefix            string
 	user, pass, realm string
+}
+
+// noRangeHandler drops the Range header from any request under its
+// prefix, so the handler behind it serves the whole resource with 200
+// where the client asked for 206 and a part of it.
+type noRangeHandler struct {
+	next   http.Handler
+	prefix string
+}
+
+func (h *noRangeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if strings.HasPrefix(r.URL.Path, h.prefix) {
+		r.Header.Del("Range")
+		r.Header.Del("If-Range")
+	}
+
+	h.next.ServeHTTP(w, r)
 }
 
 func (h *authHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -66,12 +89,21 @@ func main() {
 	authPass := flag.String("authpass", "", "password Basic auth accepts")
 	authRealm := flag.String("authrealm", "cadaver-test",
 		"realm named in the challenge")
+	noRange := flag.String("norangeprefix", "",
+		"answer a Range request under /PREFIX with the whole resource")
 	flag.Parse()
 
 	var h http.Handler = &webdav.Handler{
 		Prefix:     "",
 		FileSystem: webdav.Dir(*dir),
 		LockSystem: webdav.NewMemLS(),
+	}
+
+	if *noRange != "" {
+		h = &noRangeHandler{
+			next:   h,
+			prefix: "/" + strings.TrimPrefix(*noRange, "/"),
+		}
 	}
 
 	if *authPrefix != "" {

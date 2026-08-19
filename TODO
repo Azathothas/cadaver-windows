@@ -43,7 +43,7 @@ Everything is one executable:
 
 Test harnesses in tests/:
 
-  offline.sh      41 checks that need no server, no network and no
+  offline.sh      43 checks that need no server, no network and no
                   Python.  Run it first; it takes under a second.  It
                   also greps src/ for a write to standard output that
                   does not go through output.c, which is the one rule
@@ -79,9 +79,10 @@ Neither test server is complete, and the difference matters:
 
   * x/net/webdav locks correctly, including a LOCK on an unmapped URL,
     but has no dead property store, so most of the props session fails
-    against it.  It is also the only one with authentication in front
-    of a subtree (tests/godav.sh sets that up), so the two netrc
-    sessions run only there.
+    against it.  tests/godav.sh also puts authentication in front of one
+    subtree and makes another ignore Range, because no real server here
+    does either; the two netrc sessions and the norange one run only
+    there.
   * wsgidav has a dead property store, so props is meaningful there,
     but it answers LOCK with the Content-Type "application;
     charset=utf-8", which is not a media type.  neon discards the body
@@ -332,6 +333,17 @@ Things that were looked at and deliberately not done
   one session, so there is one object and nothing to stream; making it
   a line-oriented format would only make the common case harder to
   read.
+
+* Removing the truncation `resumeget' does when its request fails.
+  TODO used to say that neon appended a whole second copy of the
+  resource when a server ignored the Range header, because
+  ne_get_range() checks the status after the body could have been
+  written.  It does not: dispatch_to_fd() below it writes to the
+  descriptor only for a 206 and discards anything else, which the
+  `norange' session established by arranging a server that ignores
+  Range.  The truncation is kept because "a failed resumeget leaves the
+  local file as it was" is worth guaranteeing here rather than by
+  inspection of a library this tree is expected to update.
 
 * Tracing the body of a transfer.  --trace carries every message body
   except the resource itself during `put', `get', `mput', `mget',

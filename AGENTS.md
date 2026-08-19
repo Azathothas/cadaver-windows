@@ -412,11 +412,10 @@ It sends a `Range` request from the current local size and appends. If
 the file is not there it reports so and does nothing.
 
 A server that ignores `Range` and answers 200 with the whole resource
-would append a second complete copy: neon checks the status only after
-the body has gone to the file. cadaver records the size before the
-request and truncates back to it when the request fails, so the file is
-left where it started. If the truncation itself fails it says so, and
-that is the one case where the file needs checking.
+is reported as an error — `Resource does not support ranged GET
+requests` — and the local file is left exactly as it was. cadaver
+records its size before the request and puts it back afterwards if the
+request failed, so that holds whatever the response was.
 
 ### `mput` on a directory
 

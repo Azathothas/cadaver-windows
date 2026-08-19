@@ -1,0 +1,10 @@
+Uploading every-byte.dat to `/norange/every-byte.dat': [.. succeeded.
+Downloading `every-byte.dat' to `partial.dat': [.. failed:
+Resource does not support ranged GET requests
+        every-byte.dat                       256  <DATE>
+        hello.txt                             28  <DATE>
+        partial.dat                          100  <DATE>
+        second.txt                            16  <DATE>
+Coll:   with space                             0  <DATE>
+Connection to `127.0.0.1' closed.
+-- cadaver exited 1 --
