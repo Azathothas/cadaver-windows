@@ -121,6 +121,14 @@ All five must pass, the last two printing "All sessions match the
 expected results".  If they do not, fix that before doing anything
 else.  Everything below assumes a green baseline.
 
+Run them from a shell that has the Windows environment: the MSYS2 UCRT64
+shortcut, or Git Bash.  A shell started as `bash -lc' from somewhere
+else has no USERPROFILE, no LOCALAPPDATA and no COMSPEC, and then the Go
+toolchain has nowhere to put its caches and the `edit' session cannot
+run the editor, because a .bat needs cmd.exe and COMSPEC is where that
+is found.  tests/godav.sh explains the first; the second reports only
+that the editor made no changes.
+
 Both build paths must stay warning-free:
 
   ./autogen.sh && ./configure --with-ssl=openssl --enable-warnings && make
