@@ -87,13 +87,14 @@ NEON_OBJS = \
 
 CAD_OBJS = src/cadaver.o src/common.o src/commands.o src/ls.o \
 	   src/cmdline.o src/options.o src/output.o src/utils.o \
-	   src/edit.o src/version.o src/search.o
+	   src/edit.o src/version.o src/search.o src/transfer.o
 
 LIB_OBJS = lib/basename.o lib/glob.o lib/rpmatch.o \
 	   lib/yesno.o lib/getpass.o lib/mkstemp.o lib/netrc.o lib/system.o
 
 HDRS = src/cadaver.h src/cmdline.h src/commands.h src/common.h \
-       src/i18n.h src/options.h src/output.h src/utils.h \
+       src/i18n.h src/options.h src/output.h src/transfer.h \
+       src/utils.h \
        lib/basename.h lib/getpass.h lib/glob.h \
        lib/netrc.h lib/system.h win32/config.h
 

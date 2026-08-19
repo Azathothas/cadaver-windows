@@ -51,6 +51,7 @@
 #include "commands.h"
 #include "utils.h"
 #include "options.h"
+#include "transfer.h"
 #include "i18n.h"
 
 static int run_editor(const char *filename)
@@ -239,7 +240,7 @@ void execute_edit(const char *native_path)
     ne_hook_post_headers(session.sess, edit_hdrs, &etag);
     output(o_download, _("Downloading `%s' to %s"), uri_path, fname);
     /* Don't puke if get fails -- perhaps we are creating a new one? */
-    out_result(ne_get(session.sess, uri_path, fd));
+    out_result(cad_get(uri_path, fd));
 
     ne_unhook_post_headers(session.sess, edit_hdrs, &etag);
 
@@ -264,7 +265,7 @@ void execute_edit(const char *native_path)
             do {
 		output(o_upload, _("Uploading changes to `%s'"), uri_path);
 
-		if (out_handle(ne_put(session.sess, uri_path, fd))) {
+		if (out_handle(cad_put(uri_path, fd))) {
 		    upload_okay = 1;
 		} else {
 		    /* TODO: offer to save locally instead */

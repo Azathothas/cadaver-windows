@@ -25,7 +25,13 @@
 // here does that, and what it causes is silent corruption of the local
 // file, so it has to be arranged deliberately.
 //
-// Both prefixes are given without a leading slash, which is added here.
+// -slowprefix throttles the response body under one subtree.  Served
+// from a local disk over the loopback interface, a transfer is over
+// before anything can happen during it: a Ctrl-C that is meant to abort
+// one, a progress indicator, and a throughput measurement all need a
+// transfer that lasts.
+//
+// The prefixes are given without a leading slash, which is added here.
 // A leading slash would look like an absolute path to the MSYS2 and Git
 // Bash argument conversion, which rewrites one into a Windows path
 // before a native program ever sees it.
@@ -33,10 +39,12 @@ package main
 
 import (
 	"flag"
+	"io"
 	"log"
 	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"golang.org/x/net/webdav"
 )
@@ -59,6 +67,88 @@ func (h *noRangeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if strings.HasPrefix(r.URL.Path, h.prefix) {
 		r.Header.Del("Range")
 		r.Header.Del("If-Range")
+	}
+
+	h.next.ServeHTTP(w, r)
+}
+
+// slowHandler paces the response body under its prefix: chunk bytes,
+// then delay, until the body is done.  Wrapping the ResponseWriter also
+// hides its ReadFrom method, so net/http copies through Write and the
+// pacing is not bypassed by sendfile.
+type slowHandler struct {
+	next   http.Handler
+	prefix string
+	chunk  int
+	delay  time.Duration
+}
+
+type slowWriter struct {
+	http.ResponseWriter
+	chunk int
+	delay time.Duration
+}
+
+func (w *slowWriter) Write(p []byte) (int, error) {
+	written := 0
+
+	for len(p) > 0 {
+		n := w.chunk
+		if n > len(p) {
+			n = len(p)
+		}
+
+		m, err := w.ResponseWriter.Write(p[:n])
+		written += m
+		if err != nil {
+			return written, err
+		}
+
+		// Without the flush the bytes sit in net/http's buffer and
+		// arrive in one burst at the end, which is the thing this is
+		// here to avoid.
+		if f, ok := w.ResponseWriter.(http.Flusher); ok {
+			f.Flush()
+		}
+
+		p = p[n:]
+		time.Sleep(w.delay)
+	}
+
+	return written, nil
+}
+
+// slowReader paces a request body the same way, so that an upload
+// lasts as long as a download does.  Reading in chunk-sized pieces is
+// what makes it take time: the pause happens once per Read, and a
+// caller asking for a large buffer would otherwise pause once.
+type slowReader struct {
+	io.ReadCloser
+	chunk int
+	delay time.Duration
+}
+
+func (r *slowReader) Read(p []byte) (int, error) {
+	if len(p) > r.chunk {
+		p = p[:r.chunk]
+	}
+
+	n, err := r.ReadCloser.Read(p)
+	time.Sleep(r.delay)
+
+	return n, err
+}
+
+func (h *slowHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if strings.HasPrefix(r.URL.Path, h.prefix) {
+		w = &slowWriter{ResponseWriter: w, chunk: h.chunk, delay: h.delay}
+		if r.Body != nil {
+			r.Body = &slowReader{
+				ReadCloser: r.Body,
+				chunk:      h.chunk,
+				delay:      h.delay,
+			}
+		}
 	}
 
 	h.next.ServeHTTP(w, r)
@@ -91,12 +181,27 @@ func main() {
 		"realm named in the challenge")
 	noRange := flag.String("norangeprefix", "",
 		"answer a Range request under /PREFIX with the whole resource")
+	slowPrefix := flag.String("slowprefix", "",
+		"pace the response body under /PREFIX (given without the slash)")
+	slowChunk := flag.Int("slowchunk", 4096,
+		"bytes to write between pauses under -slowprefix")
+	slowDelay := flag.Duration("slowdelay", 20*time.Millisecond,
+		"how long to pause between chunks under -slowprefix")
 	flag.Parse()
 
 	var h http.Handler = &webdav.Handler{
 		Prefix:     "",
 		FileSystem: webdav.Dir(*dir),
 		LockSystem: webdav.NewMemLS(),
+	}
+
+	if *slowPrefix != "" {
+		h = &slowHandler{
+			next:   h,
+			prefix: "/" + strings.TrimPrefix(*slowPrefix, "/"),
+			chunk:  *slowChunk,
+			delay:  *slowDelay,
+		}
 	}
 
 	if *noRange != "" {

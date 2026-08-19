@@ -81,10 +81,56 @@ AUTH_PASS="p@ss'word"
 # Without a leading slash, for the same reason as above.
 NORANGE_PREFIX=norange
 
+# And one that paces the response body, for the sessions that need a
+# transfer to last long enough to measure.
+SLOW_PREFIX=slow
+
+# Each prefix above is matched against the collection a session runs in,
+# which tests/session.sh names after the session.  So a prefix has to
+# cover the name of every session that wants that subtree and no other
+# name at all.  Nothing checked that: renaming a session, or adding one
+# whose name happened to start with "netrc", failed somewhere else
+# entirely and named neither file.
+check_prefix() {
+    what=$1
+    prefix=$2
+    shift 2
+
+    for script in tests/sessions/*.cad; do
+        name=`basename "$script" .cad`
+
+        wanted=no
+        for wants in "$@"; do
+            [ "$wants" = "$name" ] && wanted=yes
+        done
+
+        case $name in
+            "$prefix"*) under=yes ;;
+            *) under=no ;;
+        esac
+
+        if [ "$wanted" = yes ] && [ "$under" = no ]; then
+            echo "godav.sh: session $name needs the $what subtree, but its" \
+                 "collection /$name is not under /$prefix" >&2
+            exit 1
+        fi
+        if [ "$wanted" = no ] && [ "$under" = yes ]; then
+            echo "godav.sh: session $name does not want the $what subtree," \
+                 "but its collection /$name falls under /$prefix" >&2
+            exit 1
+        fi
+    done
+}
+
+check_prefix "authenticated" "$AUTH_PREFIX" netrc netrclogin
+check_prefix "Range-ignoring" "$NORANGE_PREFIX" norange
+check_prefix "paced" "$SLOW_PREFIX" slow
+
 echo "-- Launching x/net/webdav on port $PORT --"
 "$SERVER" -addr "127.0.0.1:$PORT" -dir "$ABSROOT" \
     -authprefix "$AUTH_PREFIX" -authuser "$AUTH_USER" \
     -authpass "$AUTH_PASS" -norangeprefix "$NORANGE_PREFIX" \
+    -slowprefix "$SLOW_PREFIX" \
     > "$OUT/server.log" 2>&1 &
 SERVER_PID=$!
 

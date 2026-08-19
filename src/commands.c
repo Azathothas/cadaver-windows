@@ -75,6 +75,7 @@
 #include "cadaver.h"
 #include "commands.h"
 #include "options.h"
+#include "transfer.h"
 #include "utils.h"
 
 /* Local variables */
@@ -957,7 +958,7 @@ static void execute_less(const char *native)
     out_start_raw("%s", "");
 
     child_running = true;
-    ret = ne_get(session.sess, uri_path, fileno(p));
+    ret = cad_get(uri_path, fileno(p));
     if (ret) {
         cad_pclose(p);
         out_result(ret);
@@ -1008,7 +1009,7 @@ static void execute_cat(const char *native_path)
     out_flush();
     mode = cad_set_binary(STDOUT_FILENO);
 
-    ret = ne_get(session.sess, uri_path, STDOUT_FILENO);
+    ret = cad_get(uri_path, STDOUT_FILENO);
 
     cad_set_mode(STDOUT_FILENO, mode);
 
@@ -1299,10 +1300,10 @@ static void do_get(const char *native_remote, const char *native_local, int resu
     }
 
     if (resume) {
-        ret = ne_get_range(session.sess, uri_path, &range, fd);
+        ret = cad_get_range(uri_path, &range, fd);
     }
     else {
-        ret = ne_get(session.sess, uri_path, fd);
+        ret = cad_get(uri_path, fd);
     }
 
     if (ret != NE_OK && resume) {
@@ -1380,7 +1381,7 @@ static void simple_put(const char *local, const char *remote)
     if (fd < 0) {
 	out_fail(_("could not open file: %s\n"), strerror(errno));
     } else {
-	out_result(ne_put(session.sess, remote, fd));
+	out_result(cad_put(remote, fd));
 	(void) close(fd);
     }
 }
@@ -1430,28 +1431,36 @@ static void multi_rmcol(int argc, const char *argv[])
 
 static void multi_less(int argc, const char *argv[])
 {
-    map_multi(execute_less, argc, argv);
+    int n;
+    for (n = 0; n < argc && !cad_transfer_interrupted(); n++)
+        execute_less(argv[n]);
 }
 
 static void multi_cat(int argc, const char *argv[])
 {
-    map_multi(execute_cat, argc, argv);
+    int n;
+    for (n = 0; n < argc && !cad_transfer_interrupted(); n++)
+        execute_cat(argv[n]);
 }
 
-/* this is getting too easy */
+/* `mput' and `mget' stop at a Ctrl-C rather than carrying on to the
+ * next file.  Interrupting one file out of thirty and then watching the
+ * other twenty-nine go past is not what the key means. */
 static void multi_mput(int argc, const char *argv[])
 {
     for(; argv[0] != NULL; argv++) {
 	char *uri_path = uri_resolve_native(argv[0]);
 	simple_put(argv[0], uri_path);
 	ne_free(uri_path);
-    }    
+        if (cad_transfer_interrupted()) break;
+    }
 }
 
 static void multi_mget(int argc, const char *argv[])
 {
     for(; argv[0] != NULL; argv++) {
 	execute_get(argv[0], NULL);
+        if (cad_transfer_interrupted()) break;
     }
 }
 

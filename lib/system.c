@@ -329,6 +329,20 @@ int cad_file_info(const char *path, struct cad_finfo *info)
     return 0;
 }
 
+int cad_fd_info(int fd, struct cad_finfo *info)
+{
+    struct _stati64 st;
+
+    if (_fstati64(fd, &st) != 0) return -1;
+
+    info->size = (ne_off_t) st.st_size;
+    info->mtime = st.st_mtime;
+    info->is_dir = (st.st_mode & _S_IFMT) == _S_IFDIR;
+    info->is_reg = (st.st_mode & _S_IFMT) == _S_IFREG;
+
+    return 0;
+}
+
 /* cmd.exe takes a double-quoted argument literally apart from the
  * quotes themselves, and a Windows path cannot contain one, so quoting
  * the path is enough.  The command is left alone: it may legitimately
@@ -435,6 +449,20 @@ int cad_file_info(const char *path, struct cad_finfo *info)
     struct stat st;
 
     if (stat(path, &st) != 0) return -1;
+
+    info->size = (ne_off_t) st.st_size;
+    info->mtime = st.st_mtime;
+    info->is_dir = S_ISDIR(st.st_mode) ? 1 : 0;
+    info->is_reg = S_ISREG(st.st_mode) ? 1 : 0;
+
+    return 0;
+}
+
+int cad_fd_info(int fd, struct cad_finfo *info)
+{
+    struct stat st;
+
+    if (fstat(fd, &st) != 0) return -1;
 
     info->size = (ne_off_t) st.st_size;
     info->mtime = st.st_mtime;
