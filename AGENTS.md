@@ -301,8 +301,9 @@ for c in result["commands"]:
     if c["status"] == "failed":
         print(c["command"], c["args"], "->", c.get("context"))
 
-# The exit status says the same thing without parsing anything.
-assert p.returncode == result["summary"]["failed"]
+# The exit status says the same thing without parsing anything, up to
+# the cap.
+assert p.returncode == min(result["summary"]["failed"], 125)
 ```
 
 ### Without `--json`
