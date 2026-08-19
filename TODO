@@ -70,7 +70,7 @@ Test harnesses in tests/:
                   normalise.py replaces them
   expand.py       substitutes the paths into a session script
 
-There are 24 sessions.  A session is tests/sessions/NAME.cad, and may
+There are 25 sessions.  A session is tests/sessions/NAME.cad, and may
 bring:
 
   NAME.flags      extra arguments for the cadaver command line
@@ -91,11 +91,12 @@ Neither test server is complete, and the difference matters:
   * x/net/webdav locks correctly, including a LOCK on an unmapped URL,
     but has no dead property store, so most of the props session fails
     against it.  tests/godav.sh also puts authentication in front of one
-    subtree, makes another ignore Range, and paces the body under a
-    third, because no real server here does any of those.
+    subtree, makes another ignore Range, paces the body under a third
+    and, under a fourth, names a member outside the collection in
+    every PROPFIND, because no real server here does any of those.
     tests/godav/deltav.go adds DASL and DeltaV in front of it, which
-    x/net/webdav does not implement at all.  Four sessions run only
-    there: netrc, netrclogin, norange and deltav.
+    x/net/webdav does not implement at all.  Five sessions run only
+    there: netrc, netrclogin, norange, deltav and escape.
   * wsgidav has a dead property store, so props is meaningful there,
     but it answers LOCK with the Content-Type "application;
     charset=utf-8", which is not a media type.  neon discards the body

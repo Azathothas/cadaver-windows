@@ -457,7 +457,7 @@ nor the character.
 ./tests/wsgidav.sh
 ```
 
-24 scripted sessions run against a real WebDAV server, with the
+25 scripted sessions run against a real WebDAV server, with the
 transcript compared line for line against `tests/expected/`, and the
 exit status pinned on the last line of each. Each session gets a
 collection of its own, created through the server, so one cannot leave
@@ -484,7 +484,8 @@ Neither test server is complete, so both are used:
   Go source in `tests/godav`, locks correctly but has no dead property
   store, so most of the `props` session fails against it. It needs a Go
   toolchain and, on the first run, network access. `tests/godav/deltav.go`
-  adds DASL and DeltaV in front of it, and four sessions run only there.
+  adds DASL and DeltaV in front of it, and five sessions run only
+  there.
 * [wsgidav](https://github.com/mar10/wsgidav) has a dead property store,
   so `props` is meaningful there, but it answers `LOCK` with the
   `Content-Type` `application; charset=utf-8`, which is not a media

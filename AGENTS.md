@@ -479,6 +479,12 @@ does what `put` or `get` would have done. Both stop at a Ctrl-C, and
 both refuse to go more than 64 levels deep, so a junction or a symbolic
 link that makes a directory contain itself is not walked forever.
 
+`rget` is the only command that writes a local file under a name the
+server chose. A member the server names `..`, or names with a path
+separator in it, or with a colon on Windows, is refused and counted as
+a failure: joining such a name to the destination would write outside
+the directory you asked for.
+
 ### `resumeget` needs the local file to exist
 
 It sends a `Range` request from the current local size and appends. If

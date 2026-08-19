@@ -27,6 +27,15 @@ Changes in version 0.28-win3:
   is null where the duration reads as 0.000 seconds, because a rate
   worked out from a duration the document cannot express is one the
   numbers beside it do not support.
+* `rget' refuses a member name the server chose that is not one path
+  segment.  It is the only command that writes a local file under a name
+  the server picked rather than one the user typed, and it joined that
+  name to the destination unchecked: a member href of
+  "..%2F..%2Fescaped.txt" unescapes to "../../escaped.txt", and against
+  a server that returns one, `rget' wrote outside the directory it was
+  given.  A name that is empty, "." or "..", or that holds a path
+  separator -- or a colon on Windows, where one names an alternate data
+  stream -- is now reported and skipped.
 * A path outside the active ANSI code page works.  cadaver re-decodes
   its command line from the wide form and hands UTF-8 around, and
   lib/system.c then opens, stats and renames with the C runtime's
@@ -119,6 +128,18 @@ Changes in version 0.28-win3:
   buffer and both property lists behind on every search that did not
   work, and execute_chexec() leaked the URL when its first argument was
   not + or -.
+* Bug fix: `cat a b' and `less a b' did nothing at all after an
+  interrupted transfer.  Both read the interrupt flag as their loop
+  condition, and nothing cleared it between commands.
+* Bug fix: `bench' with a ten-digit size and a G suffix multiplied it
+  into a signed 64-bit overflow, which is undefined rather than large.
+  The size and the count are both parsed with their bounds checked
+  before each step, and the payload is allocated with malloc() so that a
+  gigabyte the machine cannot provide is reported rather than aborting
+  the process.
+* Bug fix: the resource cache keyed on ne_path_compare(), which ignores
+  case.  That is right where neon uses it and wrong as a cache key,
+  because /Foo and /foo are two resources on a case-sensitive server.
 * Tests:
  - tests/godav/deltav.go answers SEARCH and the DeltaV methods, which
    x/net/webdav does not implement and wsgidav does not either.  The
@@ -139,6 +160,9 @@ Changes in version 0.28-win3:
    tests/normalise.py has to replace in the transcript.
  - tests/sessions/glob.check counts the requests one command made, so
    that losing the resource cache has something to fail.
+ - The Go test server can name a member outside the collection in every
+   PROPFIND under one prefix, and the `escape' session checks that
+   `rget' writes nothing outside the directory it was given.
  - tests/offline.sh is 61 checks rather than 43, and looks for two more
    ways to write to standard output: a stdio call naming stdout, and a
    write to the descriptor.
