@@ -1,12 +1,12 @@
 Creating `clob': succeeded.
-Uploading hello.txt to `/clobber/clob/hello.txt': [.. succeeded.
-Downloading `hello.txt' to `copy.txt': [.. succeeded.
+Uploading hello.txt to `/clobber/clob/hello.txt': [28 bytes] succeeded.
+Downloading `hello.txt' to `copy.txt': [28 bytes] succeeded.
 Enter local filename for `hello.txt': Downloading `hello.txt': failed:
 cancelled; the local file `copy.txt' exists and no other name was given.
 Downloading `hello.txt': failed:
 the local file `copy.txt' exists, and clobber is set to no.
-Downloading `hello.txt' to `copy.txt': [.. succeeded.
-Downloading `nosuchresource' to `missing.txt': [.. failed:
+Downloading `hello.txt' to `copy.txt': [28 bytes] succeeded.
+Downloading `nosuchresource' to `missing.txt': failed:
 404 Not Found
         copy.txt                              28  <DATE>
         every-byte.dat                       256  <DATE>

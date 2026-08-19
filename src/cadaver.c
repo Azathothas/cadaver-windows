@@ -109,6 +109,28 @@ static int verbose;
                     NE_DBG_XMLPARSE | NE_DBG_SOCKET | NE_DBG_SSL | \
                     NE_DBG_HTTPAUTH | NE_DBG_LOCKS | DEBUG_FILES)
 
+/* How much the transfer in progress has moved, and whether there is one
+ * whose output is not a terminal.  Reported when it succeeds; see
+ * out_transfer_report(). */
+static ne_off_t transfer_bytes;
+static int transfer_counting;
+
+/* Forgets the count, so that a transfer which failed cannot have it
+ * reported against whatever the next command does. */
+static void transfer_forget(void)
+{
+    transfer_counting = 0;
+    transfer_bytes = 0;
+}
+
+void out_transfer_report(void)
+{
+    if (transfer_counting && transfer_bytes > 0)
+        out_printf(" [%" NE_FMT_NE_OFF_T " bytes]", transfer_bytes);
+
+    transfer_forget();
+}
+
 /* Current output state */
 static enum out_state {
     out_none, /* not doing anything */
@@ -127,6 +149,8 @@ static void quit_handler(int signo);
 static void notifier(void *ud, ne_session_status status, 
                      const ne_session_status_info *info);
 static void pretty_progress_bar(ne_off_t progress, ne_off_t total);
+static void plain_progress(ne_off_t progress, ne_off_t total,
+                           int starting);
 static void hook_create_request(ne_request *req, void *userdata,
                                 const char *method, const char *target);
 static void hook_pre_send(ne_request *req, void *userdata, ne_buffer *hdr);
@@ -1059,20 +1083,21 @@ static char **completion(const char *text, int start, int end)
 void out_state_reset(void)
 {
     out_state = out_none;
+    transfer_forget();
 }
 
 void output(enum output_type t, const char *fmt, ...)
 {
     va_list params;
     if (t == o_finish) {
-	switch (out_state) {
-	case out_transfer_plain:
-	    out_printf("] ");
-	    break;
-	default:
-	    out_putchar(' ');
-	    break;
-	}
+	/* One space between what a command announced and how it went,
+	 * whatever the state.  The plain progress indicator used to
+	 * open a bracket that this closed; it writes a byte count in
+	 * brackets of its own now, so there is nothing left open.
+	 * out_success() has already reported that count if there was
+	 * one to report; this is where a failure drops it. */
+	out_putchar(' ');
+	transfer_forget();
     }
     va_start(params, fmt);
     out_vprintf(fmt, params);
@@ -1142,6 +1167,7 @@ static void init_options(void)
 
     set_option(opt_editor, NULL);
     set_option(opt_namespace, ne_strdup(DEFAULT_NAMESPACE));
+    set_option(opt_lsformat, ne_strdup(LS_DEFAULT_FORMAT));
     set_bool_option(opt_overwrite, 1);
     set_bool_option(opt_quiet, 1);
     set_bool_option(opt_searchall, 1);
@@ -1306,12 +1332,14 @@ static void notifier(void *ud, ne_session_status status, const ne_session_status
                 || (out_state == out_transfer_upload 
                     && status == ne_status_sending)) {
                 if (isatty(STDOUT_FILENO) && info->sr.total > 0) {
+                    /* The bar has already shown the size. */
+                    transfer_counting = 0;
                     out_state = out_transfer_pretty;
                     out_putchar('\n');
                     pretty_progress_bar(info->sr.progress, info->sr.total);
                 } else {
                     out_state = out_transfer_plain;
-                    out_printf(" [.");
+                    plain_progress(info->sr.progress, info->sr.total, 1);
                 }
             }
             break;                
@@ -1322,15 +1350,14 @@ static void notifier(void *ud, ne_session_status status, const ne_session_status
     case out_transfer_plain:
 	switch (status) {
 	case ne_status_connecting:
-	    out_printf(_("] reconnecting: "));
+	    out_printf(_("reconnecting: "));
 	    break;
 	case ne_status_connected:
-	    out_printf(_("okay ["));
+	    out_printf(_("okay "));
 	    break;
         case ne_status_sending:
         case ne_status_recving:
-            out_putchar('.');
-            out_flush();
+            plain_progress(info->sr.progress, info->sr.total, 0);
             if (info->sr.progress == info->sr.total) {
                 out_state = out_transfer_done;
             }
@@ -1378,8 +1405,46 @@ sub_timeval(struct timeval *tdiff, struct timeval *t1, struct timeval *t0)
     }
 }
 
+/* The progress indicator when the output is not a terminal: a log wants
+ * to know how much moved, not to be redrawn.  It used to write one dot
+ * per transfer callback, so a large transfer left a line of hundreds of
+ * them and no number at all.
+ *
+ * The finished count is always written.  Before that a line only
+ * appears every PLAIN_PROGRESS_SECONDS, so that a transfer nothing is
+ * watching stays quiet and a long one still says it is alive.  Nothing
+ * in the test suite runs that long, which is what keeps the expected
+ * transcripts exact. */
+#define PLAIN_PROGRESS_SECONDS 10.0
+
+static void plain_progress(ne_off_t progress, ne_off_t total, int starting)
+{
+    static double last;
+    double now = cad_now_seconds();
+
+    transfer_counting = 1;
+    transfer_bytes = progress;
+
+    if (starting) {
+        last = now;
+        return;
+    }
+
+    if (progress == total) return;      /* out_transfer_report() has it */
+
+    if (now - last < PLAIN_PROGRESS_SECONDS) return;
+    last = now;
+
+    if (total > 0)
+        out_printf(" [%" NE_FMT_NE_OFF_T " of %" NE_FMT_NE_OFF_T " bytes]",
+                   progress, total);
+    else
+        out_printf(" [%" NE_FMT_NE_OFF_T " bytes so far]", progress);
+    out_flush();
+}
+
 /* Smooth progress bar.
- * Doesn't update the bar more than once every 100ms, since this 
+ * Doesn't update the bar more than once every 100ms, since this
  * might give flicker, and would be bad if we are displaying on
  * a slow link anyway.
  */
@@ -1438,7 +1503,7 @@ static int supply_creds(const char *prompt, const char *realm, const char *hostn
 	out_putchar(' ');
 	break;
     case out_transfer_plain:
-	out_printf("] ");
+	out_putchar(' ');
 	break;
     }
     out_printf(prompt, realm, hostname);
@@ -1495,7 +1560,7 @@ static int supply_creds(const char *prompt, const char *realm, const char *hostn
 	out_flush();
 	break;
     case out_transfer_plain:
-	out_printf(_("Retrying ["));
+	out_printf(_("Retrying: "));
 	out_flush();
 	break;
     default:

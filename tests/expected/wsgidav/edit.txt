@@ -1,5 +1,5 @@
 Creating `edited': succeeded.
-Uploading hello.txt to `/edit/edited/hello.txt': [.. succeeded.
+Uploading hello.txt to `/edit/edited/hello.txt': [28 bytes] succeeded.
 Locking `/edit/edited/hello.txt': failed:
 Response missing activelock for (null)
 hello from cadaver

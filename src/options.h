@@ -43,6 +43,7 @@ enum option_id {
     opt_lockscope,
     opt_clobber,
     opt_pager,
+    opt_lsformat,
    
     opt_searchdepth,
     opt_searchorder,
@@ -66,6 +67,10 @@ extern enum clobber_mode clobber;
  * is not one, having said so on standard error -- it is called from the
  * command line as well as from `set'. */
 int set_clobber(const char *what);
+
+/* The layout `ls' used before there was an option for it, which is
+ * both the default and what an unset lsformat falls back to. */
+#define LS_DEFAULT_FORMAT "%5t %v%e%-29n %10s  %d"
 
 extern int lockdepth; /* current lock depth setting. */
 extern int searchdepth; /* current search depth setting. */

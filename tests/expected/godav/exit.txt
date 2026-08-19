@@ -1,5 +1,5 @@
 Creating `exits': succeeded.
-Uploading hello.txt to `/exit/exits/hello.txt': [.. succeeded.
+Uploading hello.txt to `/exit/exits/hello.txt': [28 bytes] succeeded.
 Deleting `/exit/exits/nosuchresource': failed:
 404 Not Found
 Fetching properties for `nosuchresource': failed:

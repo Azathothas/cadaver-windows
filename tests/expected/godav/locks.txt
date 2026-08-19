@@ -1,5 +1,5 @@
 Creating `locked': succeeded.
-Uploading hello.txt to `/locks/locked/hello.txt': [.. succeeded.
+Uploading hello.txt to `/locks/locked/hello.txt': [28 bytes] succeeded.
 No owned locks.
 Locking `hello.txt': succeeded.
 Lock token <TOKEN>:

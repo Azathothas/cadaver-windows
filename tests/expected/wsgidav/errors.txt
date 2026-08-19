@@ -12,7 +12,7 @@ Deleting collection `/errors/errs/nothing': failed:
 it is not a collection.
 The `rmcol' command can only be used to delete collections.
 Use `rm errs/nothing' to delete this resource.
-Uploading hello.txt to `/errors/errs/hello.txt': [.. succeeded.
+Uploading hello.txt to `/errors/errs/hello.txt': [28 bytes] succeeded.
 Deleting collection `/errors/errs/hello.txt': failed:
 it is not a collection.
 The `rmcol' command can only be used to delete collections.

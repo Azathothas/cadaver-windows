@@ -1,5 +1,5 @@
 Creating `props': succeeded.
-Uploading hello.txt to `/props/props/hello.txt': [.. succeeded.
+Uploading hello.txt to `/props/props/hello.txt': [28 bytes] succeeded.
 Setting property on `hello.txt': failed:
 /props/props/hello.txt: 403 Forbidden
 Fetching properties for `hello.txt':

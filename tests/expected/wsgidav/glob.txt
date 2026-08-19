@@ -1,7 +1,7 @@
 Creating `g': succeeded.
 [Matching... 2 matches.]
-Uploading hello.txt to `/glob/g/hello.txt': [.. succeeded.
-Uploading second.txt to `/glob/g/second.txt': [.. succeeded.
+Uploading hello.txt to `/glob/g/hello.txt': [28 bytes] succeeded.
+Uploading second.txt to `/glob/g/second.txt': [16 bytes] succeeded.
 Listing collection `/glob/g/': succeeded.
         hello.txt                             28  <DATE>
         second.txt                            16  <DATE>

@@ -1,0 +1,31 @@
+Uploading hello.txt to `/listing/hello.txt': [28 bytes] succeeded.
+Downloading `hello.txt' to `.hidden.txt': [28 bytes] succeeded.
+        every-byte.dat                       256  <DATE>
+        hello.txt                             28  <DATE>
+        partial.dat                          100  <DATE>
+        second.txt                            16  <DATE>
+Coll:   with space                             0  <DATE>
+        .hidden.txt                           28  <DATE>
+        every-byte.dat                       256  <DATE>
+        hello.txt                             28  <DATE>
+        partial.dat                          100  <DATE>
+        second.txt                            16  <DATE>
+Coll:   with space                             0  <DATE>
+        .hidden.txt                           28  <DATE>
+        every-byte.dat                       256  <DATE>
+        hello.txt                             28  <DATE>
+        partial.dat                          100  <DATE>
+        second.txt                            16  <DATE>
+Coll:   with space                             0  <DATE>
+Listing collection `/listing/': succeeded.
+resource hello.txt                  28 <DATE>
+Listing collection `/listing/': succeeded.
+hello.txt is 28 B%
+Listing collection `/listing/': succeeded.
+        hello.txt                             28  <DATE>
+Listing collection `/listing/': succeeded.
+hello.txt [%q]
+lls: unknown option `-q'; only -a and -l are accepted.
+Deleting `/listing/hello.txt': succeeded.
+Connection to `127.0.0.1' closed.
+-- cadaver exited 1 --

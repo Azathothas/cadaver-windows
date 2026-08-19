@@ -39,6 +39,7 @@
 #include "i18n.h"
 #include "commands.h"
 #include "cadaver.h"
+#include "options.h"
 #include "utils.h"
 #include "basename.h"
 #include "utils.h"
@@ -90,23 +91,146 @@ static int compare_resource(const struct resource *r1,
     }
 }
 
+/* Writes `text' in a field `width' wide, padded on the right when
+ * `left' and on the left otherwise.  A field narrower than the text is
+ * widened rather than truncating a name. */
+static void put_field(const char *text, int width, int left)
+{
+    int pad = width - (int)strlen(text);
+
+    if (!left) while (pad-- > 0) out_putchar(' ');
+    out_puts(text);
+    if (left) while (pad-- > 0) out_putchar(' ');
+}
+
+/* The rounded binary form of a byte count: 1.0 MiB, powers of 1024. */
+static const char *rounded_size(dav_size_t bytes, char *buf, size_t buflen)
+{
+    static const char *const unit[] = { "KiB", "MiB", "GiB", "TiB" };
+    double value = (double)bytes;
+    int n;
+
+    if (bytes < 1024) {
+        ne_snprintf(buf, buflen, "%" FMT_DAV_SIZE_T "u B", bytes);
+        return buf;
+    }
+
+    for (n = 0; n < 3 && value >= 1024.0 * 1024.0; n++)
+        value /= 1024.0;
+    value /= 1024.0;
+
+    ne_snprintf(buf, buflen, "%.1f %s", value, unit[n]);
+    return buf;
+}
+
+/* What one conversion in `lsformat' stands for.  `res' is the member,
+ * `name' its last path segment in native form.  Returns the text, using
+ * `buf' where it has to build one. */
+static const char *ls_field(char letter, const struct resource *res,
+                            const char *name, char *buf, size_t buflen)
+{
+    char stamp[40];
+
+    switch (letter) {
+    case 'n': return name;
+    case 'h': return res->uri;
+    case 's':
+        ne_snprintf(buf, buflen, "%" FMT_DAV_SIZE_T "u", res->size);
+        return buf;
+    case 'S': return rounded_size(res->size, buf, buflen);
+    case 'd': return format_time(res->modtime);
+    case 'D':
+        if (res->modtime == (time_t)-1
+            || !iso8601_utc(res->modtime, stamp, sizeof stamp))
+            return "-";
+        ne_strnzcpy(buf, stamp, buflen);
+        return buf;
+    case 't':
+        switch (res->type) {
+        case resr_reference: return _("Ref:");
+        case resr_collection: return _("Coll:");
+        case resr_normal: return "";
+        default: return "???";
+        }
+    case 'T':
+        switch (res->type) {
+        case resr_reference: return "reference";
+        case resr_collection: return "collection";
+        case resr_normal: return "resource";
+        default: return "error";
+        }
+    case 'e': return res->is_executable ? "*" : " ";
+    /* 0: no vcr, 1: checkin, 2: checkout */
+    case 'v': return res->is_vcr == 0 ? " " : (res->is_vcr == 1 ? ">" : "<");
+    default: return NULL;
+    }
+}
+
+/* Writes one member according to `lsformat'.  A conversion is a %, an
+ * optional `-' for left alignment, an optional field width, and one
+ * letter; anything else is written as it stands. */
+static void display_ls_formatted(const struct resource *res, const char *name)
+{
+    const char *fmt = get_option(opt_lsformat);
+    const char *p;
+    char buf[128];
+
+    if (fmt == NULL) fmt = LS_DEFAULT_FORMAT;
+
+    for (p = fmt; *p != '\0'; p++) {
+        int left = 0, width = 0;
+        const char *text;
+
+        if (*p != '%') {
+            out_putchar(*p);
+            continue;
+        }
+
+        p++;
+        if (*p == '%') {
+            out_putchar('%');
+            continue;
+        }
+        if (*p == '-') {
+            left = 1;
+            p++;
+        }
+        while (*p >= '0' && *p <= '9') {
+            width = width * 10 + (*p - '0');
+            p++;
+        }
+
+        if (*p == '\0') {
+            /* A trailing % stands for itself rather than eating the
+             * newline below. */
+            out_putchar('%');
+            break;
+        }
+
+        text = ls_field(*p, res, name, buf, sizeof buf);
+        if (text == NULL) {
+            /* A letter that means nothing is written as it stands, so
+             * an unknown conversion is visible rather than silently
+             * dropped. */
+            out_putchar('%');
+            out_putchar(*p);
+        }
+        else {
+            put_field(text, width, left);
+        }
+    }
+
+    out_putchar('\n');
+}
+
 static void display_ls_line(struct resource *res)
 {
-    const char *restype, *path = res->uri;
-    char exec_char, vcr_char;
+    const char *path = res->uri;
     char *native_path;
 
     /* Before the name is cut down to its last segment below. */
     res_listing(res->uri, res->type, res->size, res->modtime,
                 res->is_executable, res->error_status, res->error_reason);
-
-    switch (res->type) {
-    case resr_normal: restype = ""; break;
-    case resr_reference: restype = _("Ref:"); break;
-    case resr_collection: restype = _("Coll:"); break;
-    default:
-        restype = "???"; break;
-    }
 
     if (ne_path_has_trailing_slash(path)) {
         res->uri[strlen(path)-1] = '\0';
@@ -122,16 +246,14 @@ static void display_ls_line(struct resource *res)
     native_path = native_path_from_uri(path);
 
     if (res->type == resr_error) {
+        /* A member the server could not report on has a status and a
+         * reason and none of the fields `lsformat' names, so it keeps
+         * its own line. */
 	out_printf(_("Error: %-30s %d %s\n"), native_path, res->error_status,
 	       res->error_reason?res->error_reason:_("unknown"));
         cmd_failed(res->error_reason);
     } else {
-	exec_char = res->is_executable ? '*' : ' ';
-	/* 0: no vcr, 1: checkin, 2: checkout */
-	vcr_char = res->is_vcr==0 ? ' ' : (res->is_vcr==1? '>' : '<');
-	out_printf("%5s %c%c%-29s %10" FMT_DAV_SIZE_T "u  %s\n", 
-	       restype, vcr_char, exec_char, native_path,
-	       res->size, format_time(res->modtime));
+        display_ls_formatted(res, native_path);
     }
 
     ne_free(native_path);

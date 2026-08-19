@@ -1,5 +1,5 @@
 Creating `traced': succeeded.
-Uploading hello.txt to `/trace/traced/hello.txt': [.. succeeded.
+Uploading hello.txt to `/trace/traced/hello.txt': [28 bytes] succeeded.
 Listing collection `/trace/traced/': succeeded.
         hello.txt                             28  <DATE>
 Deleting `/trace/traced/hello.txt': succeeded.

@@ -1,6 +1,6 @@
 Creating `over': succeeded.
-Uploading hello.txt to `/overwrite/over/hello.txt': [.. succeeded.
-Uploading second.txt to `/overwrite/over/second.txt': [.. succeeded.
+Uploading hello.txt to `/overwrite/over/hello.txt': [28 bytes] succeeded.
+Uploading second.txt to `/overwrite/over/second.txt': [16 bytes] succeeded.
 Copying `/overwrite/over/hello.txt' to `/overwrite/over/second.txt': failed:
 412 Precondition Failed
 `/overwrite/over/second.txt' already exists. `set overwrite on' replaces it.

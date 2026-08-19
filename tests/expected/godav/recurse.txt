@@ -1,10 +1,10 @@
 Creating `/recurse/uploaded/': succeeded.
-Uploading ./every-byte.dat to `/recurse/uploaded/every-byte.dat': [.. succeeded.
-Uploading ./hello.txt to `/recurse/uploaded/hello.txt': [.. succeeded.
-Uploading ./partial.dat to `/recurse/uploaded/partial.dat': [.. succeeded.
-Uploading ./second.txt to `/recurse/uploaded/second.txt': [.. succeeded.
+Uploading ./every-byte.dat to `/recurse/uploaded/every-byte.dat': [256 bytes] succeeded.
+Uploading ./hello.txt to `/recurse/uploaded/hello.txt': [28 bytes] succeeded.
+Uploading ./partial.dat to `/recurse/uploaded/partial.dat': [100 bytes] succeeded.
+Uploading ./second.txt to `/recurse/uploaded/second.txt': [16 bytes] succeeded.
 Creating `/recurse/uploaded/with space/': succeeded.
-Uploading ./with space/has space.txt to `/recurse/uploaded/with space/has space.txt': [.. succeeded.
+Uploading ./with space/has space.txt to `/recurse/uploaded/with space/has space.txt': [26 bytes] succeeded.
 Listing collection `/recurse/uploaded/': succeeded.
 Coll:   with space                             0  <DATE>
         every-byte.dat                       256  <DATE>
@@ -14,21 +14,21 @@ Coll:   with space                             0  <DATE>
 Listing collection `/recurse/uploaded/with space/': succeeded.
         has space.txt                         26  <DATE>
 Creating `/recurse/uploaded/': it is already there.
-Uploading ./every-byte.dat to `/recurse/uploaded/every-byte.dat': [.. succeeded.
-Uploading ./hello.txt to `/recurse/uploaded/hello.txt': [.. succeeded.
-Uploading ./partial.dat to `/recurse/uploaded/partial.dat': [.. succeeded.
-Uploading ./second.txt to `/recurse/uploaded/second.txt': [.. succeeded.
+Uploading ./every-byte.dat to `/recurse/uploaded/every-byte.dat': [256 bytes] succeeded.
+Uploading ./hello.txt to `/recurse/uploaded/hello.txt': [28 bytes] succeeded.
+Uploading ./partial.dat to `/recurse/uploaded/partial.dat': [100 bytes] succeeded.
+Uploading ./second.txt to `/recurse/uploaded/second.txt': [16 bytes] succeeded.
 Creating `/recurse/uploaded/with space/': it is already there.
-Uploading ./with space/has space.txt to `/recurse/uploaded/with space/has space.txt': [.. succeeded.
+Uploading ./with space/has space.txt to `/recurse/uploaded/with space/has space.txt': [26 bytes] succeeded.
 Listing collection `/recurse/uploaded/': succeeded.
 Listing collection `/recurse/uploaded/with space/': succeeded.
-Downloading `has space.txt' to `roundtrip/with space/has space.txt': [.. succeeded.
-Downloading `every-byte.dat' to `roundtrip/every-byte.dat': [.. succeeded.
-Downloading `hello.txt' to `roundtrip/hello.txt': [.. succeeded.
-Downloading `partial.dat' to `roundtrip/partial.dat': [.. succeeded.
-Downloading `second.txt' to `roundtrip/second.txt': [.. succeeded.
-Downloading `uploaded/hello.txt' to `one-file.txt': [.. succeeded.
-Uploading hello.txt to `/recurse/uploaded/one-file.txt': [.. succeeded.
+Downloading `has space.txt' to `roundtrip/with space/has space.txt': [26 bytes] succeeded.
+Downloading `every-byte.dat' to `roundtrip/every-byte.dat': [256 bytes] succeeded.
+Downloading `hello.txt' to `roundtrip/hello.txt': [28 bytes] succeeded.
+Downloading `partial.dat' to `roundtrip/partial.dat': [100 bytes] succeeded.
+Downloading `second.txt' to `roundtrip/second.txt': [16 bytes] succeeded.
+Downloading `uploaded/hello.txt' to `one-file.txt': [28 bytes] succeeded.
+Uploading hello.txt to `/recurse/uploaded/one-file.txt': [28 bytes] succeeded.
 Creating `/recurse/nosuchparent/uploaded/': failed:
 409 Conflict
 Deleting collection `/recurse/uploaded/': succeeded.

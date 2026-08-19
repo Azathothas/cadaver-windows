@@ -1,4 +1,4 @@
-Uploading hello.txt to `/netrc/hello.txt': [.. succeeded.
+Uploading hello.txt to `/netrc/hello.txt': [28 bytes] succeeded.
 Listing collection `/netrc/': succeeded.
         hello.txt                             28  <DATE>
 Deleting `/netrc/hello.txt': succeeded.

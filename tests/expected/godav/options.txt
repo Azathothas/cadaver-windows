@@ -13,6 +13,7 @@ Options:
  client-cert-uri: unset
        namespace: http://webdav.org/cadaver/custom-properties/
            pager: unset
+        lsformat: %5t %v%e%-29n %10s  %d
            proxy: unset
       proxy-port: unset
      systemproxy: off
@@ -40,6 +41,7 @@ Options:
  client-cert-uri: unset
        namespace: http://webdav.org/cadaver/custom-properties/
            pager: unset
+        lsformat: %5t %v%e%-29n %10s  %d
            proxy: unset
       proxy-port: unset
      systemproxy: off
@@ -65,6 +67,7 @@ Options:
  client-cert-uri: unset
        namespace: http://example.com/props/
            pager: unset
+        lsformat: %5t %v%e%-29n %10s  %d
            proxy: unset
       proxy-port: unset
      systemproxy: off

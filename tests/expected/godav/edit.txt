@@ -1,10 +1,10 @@
 Creating `edited': succeeded.
-Uploading hello.txt to `/edit/edited/hello.txt': [.. succeeded.
+Uploading hello.txt to `/edit/edited/hello.txt': [28 bytes] succeeded.
 Locking `/edit/edited/hello.txt': succeeded.
-Downloading `/edit/edited/hello.txt' to <TMP>/cadaver-edit-XXXXXX.txt [.. succeeded.
+Downloading `/edit/edited/hello.txt' to <TMP>/cadaver-edit-XXXXXX.txt [28 bytes] succeeded.
 edit: Running editor: `<EDITOR> "<TMP>/cadaver-edit-XXXXXX.txt"'...
 edit: Changes were made.
-Uploading changes to `/edit/edited/hello.txt' [.. succeeded.
+Uploading changes to `/edit/edited/hello.txt' [54 bytes] succeeded.
 Unlocking `/edit/edited/hello.txt': succeeded.
 hello from cadaver
 line two

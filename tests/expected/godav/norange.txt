@@ -1,5 +1,5 @@
-Uploading every-byte.dat to `/norange/every-byte.dat': [.. succeeded.
-Downloading `every-byte.dat' to `partial.dat': [.. failed:
+Uploading every-byte.dat to `/norange/every-byte.dat': [256 bytes] succeeded.
+Downloading `every-byte.dat' to `partial.dat': failed:
 Resource does not support ranged GET requests
         every-byte.dat                       256  <DATE>
         hello.txt                             28  <DATE>

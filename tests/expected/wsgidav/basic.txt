@@ -2,12 +2,12 @@ Listing collection `/basic/': collection is empty.
 Creating `coll': succeeded.
 Listing collection `/basic/': succeeded.
 Coll:   coll                                   0  <DATE>
-Uploading hello.txt to `/basic/coll/hello.txt': [.. succeeded.
+Uploading hello.txt to `/basic/coll/hello.txt': [28 bytes] succeeded.
 Listing collection `/basic/coll/': succeeded.
         hello.txt                             28  <DATE>
 hello from cadaver
 line two
-Downloading `hello.txt' to `fetched.txt': [.. succeeded.
+Downloading `hello.txt' to `fetched.txt': [28 bytes] succeeded.
 Fetching headers for `hello.txt': succeeded.
 Response status-code 200, headers:
 • accept-ranges: bytes

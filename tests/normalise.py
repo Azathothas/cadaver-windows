@@ -70,9 +70,6 @@ SUBSTITUTIONS = [
     (re.compile(r"^cadaver \S+$", re.M), "cadaver <VERSION>"),
     (re.compile(r"^neon [0-9.]+: .*$", re.M), "neon <VERSION>"),
     (re.compile(r"^readline .*$", re.M), "readline <VERSION>"),
-    # The progress indicator emits one dot per transfer callback, and
-    # how many of those a transfer takes is the socket's business.
-    (re.compile(r"\[\.+"), "[.."),
     # What `bench' reports is a measurement: it differs between runs by
     # design, and tests/bench_check.py is what looks at it.  The byte
     # counts and the iteration count are not measurements and stay.

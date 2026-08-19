@@ -514,12 +514,14 @@ void out_start_transfer(enum output_type dir, const char *fmt, ...)
 
 void out_success(void)
 {
+    out_transfer_report();
     output(o_finish, _("succeeded.\n"));
     op_end(NULL);
 }
 
 void out_success_as(const char *text)
 {
+    out_transfer_report();
     output(o_finish, "%s", text);
     op_end(NULL);
 }

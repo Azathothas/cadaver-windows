@@ -1,6 +1,6 @@
 Creating `src': succeeded.
-Uploading hello.txt to `/copymove/src/hello.txt': [.. succeeded.
-Uploading second.txt to `/copymove/src/second.txt': [.. succeeded.
+Uploading hello.txt to `/copymove/src/hello.txt': [28 bytes] succeeded.
+Uploading second.txt to `/copymove/src/second.txt': [16 bytes] succeeded.
 Creating `dest': succeeded.
 Copying `/copymove/src/hello.txt' to `/copymove/dest/copied.txt': succeeded.
 Moving `/copymove/src/second.txt' to `/copymove/dest/moved.txt': succeeded.

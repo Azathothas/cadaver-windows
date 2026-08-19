@@ -1847,17 +1847,24 @@ static void execute_lls(int argc, const char **argv)
     size_t count = 0, alloc = 0, n;
     DIR *dp;
     struct dirent *ent;
-    int i;
+    int i, all = 0;
 
     for (i = 0; i < argc && argv[i] != NULL; i++) {
-        if (argv[i][0] == '-') {
-            /* The listing is always in the long form, so -l is the one
-             * option that would not change it. */
-            if (strcmp(argv[i], "-l") != 0) {
-                out_printf(_("lls: unknown option `%s'; only -l is accepted.\n"),
-                       argv[i]);
-                cmd_failed(_("unknown option"));
-                return;
+        if (argv[i][0] == '-' && argv[i][1] != '\0') {
+            const char *letter;
+
+            for (letter = argv[i] + 1; *letter; letter++) {
+                switch (*letter) {
+                case 'a': all = 1; break;
+                /* The listing is always in the long form, so -l is the
+                 * one letter that would not change it. */
+                case 'l': break;
+                default:
+                    out_printf(_("lls: unknown option `-%c'; only -a and -l "
+                                 "are accepted.\n"), *letter);
+                    cmd_failed(_("unknown option"));
+                    return;
+                }
             }
         }
         else {
@@ -1876,6 +1883,12 @@ static void execute_lls(int argc, const char **argv)
     while ((ent = readdir(dp)) != NULL) {
         if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0)
             continue;
+
+        /* A name beginning with a dot is hidden without -a, which is
+         * what lib/glob.c already does with a wildcard: `mput *' never
+         * matched one, and a listing that showed what an upload would
+         * skip was the odd one out. */
+        if (!all && ent->d_name[0] == '.') continue;
 
         if (count == alloc) {
             alloc = alloc ? alloc * 2 : 64;

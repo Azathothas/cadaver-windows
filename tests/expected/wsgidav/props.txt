@@ -1,5 +1,5 @@
 Creating `props': succeeded.
-Uploading hello.txt to `/props/props/hello.txt': [.. succeeded.
+Uploading hello.txt to `/props/props/hello.txt': [28 bytes] succeeded.
 Setting property on `hello.txt': succeeded.
 Fetching properties for `hello.txt':
 Value of colour is: blue

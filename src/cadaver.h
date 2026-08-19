@@ -205,6 +205,13 @@ void trace_body_restore(void);
  * would be written as though it interrupted one. */
 void out_state_reset(void);
 
+/* Writes how much the transfer in progress moved, where there was
+ * one and its output is not a terminal, and forgets it.  Called just
+ * before a success is reported: a transfer that failed moved the
+ * error body rather than the resource, and a byte count next to
+ * "failed:" reads as though that much of the resource had arrived. */
+void out_transfer_report(void);
+
 void output(enum output_type, const char *fmt, ...)
 #ifdef __GNUC__
                 __attribute__ ((format (printf, 2, 3)))

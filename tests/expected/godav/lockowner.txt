@@ -1,5 +1,5 @@
 Creating `owner': succeeded.
-Uploading hello.txt to `/lockowner/owner/hello.txt': [.. succeeded.
+Uploading hello.txt to `/lockowner/owner/hello.txt': [28 bytes] succeeded.
 Options:
         tolerant: off
        overwrite: on
@@ -15,6 +15,7 @@ Options:
  client-cert-uri: unset
        namespace: http://webdav.org/cadaver/custom-properties/
            pager: unset
+        lsformat: %5t %v%e%-29n %10s  %d
            proxy: unset
       proxy-port: unset
      systemproxy: off

@@ -1,5 +1,5 @@
 Creating `before': succeeded.
-Uploading hello.txt to `/mvcoll/before/hello.txt': [.. succeeded.
+Uploading hello.txt to `/mvcoll/before/hello.txt': [28 bytes] succeeded.
 Listing collection `/mvcoll/': succeeded.
 Coll:   before                                 0  <DATE>
 Moving `/mvcoll/before/' to `/mvcoll/after/': succeeded.
@@ -13,7 +13,7 @@ Listing collection `/mvcoll/': succeeded.
 Coll:   target                                 0  <DATE>
 Listing collection `/mvcoll/target/': succeeded.
 Coll:   after                                  0  <DATE>
-Uploading second.txt to `/mvcoll/plain.txt': [.. succeeded.
+Uploading second.txt to `/mvcoll/plain.txt': [16 bytes] succeeded.
 Creating `another': succeeded.
 Error: Refusing to move collection '/mvcoll/another/' to non-collection '/mvcoll/plain.txt'
 Listing collection `/mvcoll/': succeeded.

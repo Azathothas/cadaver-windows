@@ -1,0 +1,26 @@
+# What a listing looks like, local and remote.
+lcd @WORK@
+put hello.txt
+# A local name beginning with a dot is hidden from `lls' unless -a is
+# given, which is what lib/glob.c already did with a wildcard: `mput *'
+# never matched one.
+get hello.txt .hidden.txt
+lls
+lls -a
+lls -al
+# The remote listing takes its layout from an option.
+set lsformat "%T %-20n %8s %D"
+ls
+set lsformat "%n is %S%%"
+ls
+# An unset lsformat falls back to the layout `ls' has always had.
+unset lsformat
+ls
+# A letter that means nothing is written as it stands rather than
+# silently dropped.
+set lsformat "%n [%q]"
+ls
+unset lsformat
+lls -q
+delete hello.txt
+quit

@@ -115,6 +115,20 @@ static struct option {
        "Client certificate URI to use for SSL connections."),
     S(namespace, "Namespace to use for propset/propget commands."),
     S(pager, "Command to run for less/more commands."),
+    { "lsformat", opt_lsformat, NULL, opt_string, NULL, NULL, NULL,
+      "Layout of one line of an `ls' listing",
+      "A conversion is a %, an optional - for left alignment, an optional\n"
+      "field width, and one letter:\n"
+      "  %n  name          %h  full path        %%  a literal %\n"
+      "  %s  size in bytes %S  size rounded, powers of 1024\n"
+      "  %d  modified, local time    %D  modified, ISO 8601 UTC\n"
+      "  %t  Coll: or Ref: %T  collection, resource, reference\n"
+      "  %e  * if executable         %v  > or < if version-controlled\n"
+      "Anything else is written as it stands.  A member the server could\n"
+      "not report on keeps its own line, because it has a status and a\n"
+      "reason and none of these.  The default is\n"
+      "  %5t %v%e%-29n %10s  %d"
+    },
     S(proxy, "Hostname of proxy server"),
     { "proxy-port", opt_proxy_port, NULL, opt_string, NULL, NULL, NULL,
       "Port to use on proxy server", NULL },
