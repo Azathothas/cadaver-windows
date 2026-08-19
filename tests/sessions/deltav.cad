@@ -43,6 +43,14 @@ search displayname = "a&b"
 set searchorder "x&y"
 search displayname like %.txt
 unset searchorder
+# And the scope, which is a URI path: an ampersand is a sub-delimiter
+# and survives ne_path_escape(), so a collection called a&b put one
+# straight into <D:href>.
+mkcol "a&b"
+cd "a&b"
+search displayname like %txt
+cd ..
+rmcol "a&b"
 # Cancelling a checkout puts the body back.
 checkout hello.txt
 uncheckout hello.txt

@@ -778,8 +778,13 @@ static int search_from_gen(const char *href, const int depth,
 	break;
     }
 
-    ne_buffer_concat(basic_search, "<D:from><D:scope><D:href>",
-		     href, "</D:href><D:depth>", depth_str,
+    /* An ampersand is a sub-delimiter, so ne_path_escape() leaves it in
+     * a path and a collection called "a&b" produced a body that was not
+     * well-formed.  The scope is escaped like every other value that
+     * goes into an element. */
+    ne_buffer_zappend(basic_search, "<D:from><D:scope><D:href>");
+    xml_escape(basic_search, href);
+    ne_buffer_concat(basic_search, "</D:href><D:depth>", depth_str,
 		     "</D:depth></D:scope></D:from>" EOL, NULL);
 
     return NE_OK;

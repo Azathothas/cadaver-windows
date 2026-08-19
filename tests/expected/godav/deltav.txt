@@ -50,6 +50,10 @@ Using query: displayname = a&b: succeeded.
 Found no results.
 Using query: displayname like %.txt: failed:
 `x&y' in searchorder is not a property name
+Creating `a&b': succeeded.
+Using query: displayname like %txt: succeeded.
+Found no results.
+Deleting collection `/deltav/a&b/': succeeded.
 Checking out `/deltav/hello.txt': succeeded.
 Cancelling check out of `/deltav/hello.txt': succeeded.
 Cancelling check out of `/deltav/hello.txt': failed:

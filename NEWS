@@ -34,8 +34,11 @@ Changes in version 0.28-win3:
   the server.  Both are escaped now, the way `set lockowner' has been
   since 0.28-win2.  A property name in a search query becomes an element
   name and cannot be escaped, so one that is not a name is refused --
-  including one that came from `set searchorder'.  None of this was
-  reachable before there was a server to answer SEARCH and LABEL.
+  including one that came from `set searchorder'.  The scope of a search
+  is a URI path, and an ampersand is a sub-delimiter that survives
+  ne_path_escape(), so a search in a collection called "a&b" produced
+  one too.  None of this was reachable before there was a server to
+  answer SEARCH and LABEL.
 * `rget' refuses a member name the server chose that is not one path
   segment.  It is the only command that writes a local file under a name
   the server picked rather than one the user typed, and it joined that
