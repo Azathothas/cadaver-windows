@@ -22,6 +22,7 @@ PREFIX  =
 
 CC      = gcc
 AR      = ar
+WINDRES = windres
 RANLIB  = ranlib
 RM      = rm -f
 
@@ -99,6 +100,11 @@ HDRS = src/bench.h src/cadaver.h src/cmdline.h src/commands.h \
        lib/basename.h lib/getpass.h lib/glob.h \
        lib/netrc.h lib/system.h win32/config.h
 
+# The application manifest, which makes UTF-8 the process code page
+# so that the narrow calls in lib/system.c read the UTF-8 paths
+# cadaver hands them.  See win32/cadaver.manifest.
+RES_OBJ = win32/cadaver.res.o
+
 PROGS = cadaver.exe
 
 all: $(PROGS)
@@ -118,11 +124,15 @@ $(NEON_OBJS): win32/config.h
 $(CAD_OBJS): $(HDRS)
 $(LIB_OBJS): $(HDRS)
 
-cadaver.exe: $(CAD_OBJS) $(LIB_OBJS) libneon.a
-	$(CC) $(LDFLAGS) -o $@ $(CAD_OBJS) $(LIB_OBJS) -L. -lneon $(LIBS)
+$(RES_OBJ): win32/cadaver.rc win32/cadaver.manifest
+	$(WINDRES) -I win32 win32/cadaver.rc -o $@
+
+cadaver.exe: $(CAD_OBJS) $(LIB_OBJS) $(RES_OBJ) libneon.a
+	$(CC) $(LDFLAGS) -o $@ $(CAD_OBJS) $(LIB_OBJS) $(RES_OBJ) \
+	    -L. -lneon $(LIBS)
 
 clean:
-	$(RM) $(NEON_OBJS) $(CAD_OBJS) $(LIB_OBJS)
+	$(RM) $(NEON_OBJS) $(CAD_OBJS) $(LIB_OBJS) $(RES_OBJ)
 	$(RM) libneon.a $(PROGS)
 
 .PHONY: all clean

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!--
+  Makes UTF-8 the process code page, which is what the narrow Windows
+  and C runtime calls interpret a path with.
+
+  cadaver re-decodes its command line from the wide form and hands
+  around UTF-8, and lib/system.c then opens, stats and renames with the
+  runtime's narrow calls: without this those calls read UTF-8 as the
+  active ANSI code page, so a path with a character outside it named
+  something else or nothing at all.
+
+  Windows 10 version 1903 and later read this setting.  An older
+  Windows ignores it and behaves as it did before, which is the
+  behaviour this replaces rather than a new failure.
+-->
+<assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
+  <assemblyIdentity type="win32" name="cadaver" version="1.0.0.0"/>
+  <application xmlns="urn:schemas-microsoft-com:asm.v3">
+    <windowsSettings>
+      <activeCodePage
+        xmlns="http://schemas.microsoft.com/SMI/2019/WindowsSettings"
+        >UTF-8</activeCodePage>
+    </windowsSettings>
+  </application>
+</assembly>

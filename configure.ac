@@ -15,6 +15,12 @@ AC_CONFIG_SRCDIR(src/cadaver.c)
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIRS([m4 neon/macros])
 
+dnl $host_os is what the platform check below reads, and nothing else
+dnl in this script or in neon's macros sets it: without this it was
+dnl empty, so the Windows branch never ran and the autotools build
+dnl looked like a POSIX one on Windows.
+AC_CANONICAL_HOST
+
 AC_USE_SYSTEM_EXTENSIONS
 
 AC_DEFINE([_GNU_SOURCE], 1, [Define to enable GNU extensions])
@@ -62,6 +68,7 @@ NEON_VPATH_BUNDLED(['$(top_srcdir)/neon/src'], [neon/src], [
 ])
 
 AC_SUBST(TARGET_DEPS)
+AC_SUBST(RESOBJ)
 
 NE_FORMAT_TIMET
 
@@ -106,6 +113,16 @@ case $host_os in
   mingw*|msys*)
     cad_platform=windows
     LIBS="$LIBS -lws2_32"
+    dnl The application manifest that makes UTF-8 the process code page.
+    dnl Without windres there is no way to embed it, and the build falls
+    dnl back to what it did before, which is the ANSI code page.
+    AC_CHECK_TOOL([WINDRES], [windres], [no])
+    if test "$WINDRES" != "no"; then
+       RESOBJ=win32/cadaver.res.o
+    else
+       AC_MSG_WARN([windres not found: building without the application
+manifest, so a path outside the active ANSI code page will not work])
+    fi
     ;;
   *)
     cad_platform=posix
@@ -120,7 +137,7 @@ CPPFLAGS="-I\$(top_builddir) -I\$(top_srcdir)/lib $CPPFLAGS"
 
 AC_CONFIG_FILES([Makefile neon/src/Makefile])
 AC_CONFIG_COMMANDS([source-directories],
-  [for f in lib src; do test -d $f || mkdir $f; done])
+  [for f in lib src win32; do test -d $f || mkdir $f; done])
 
 AC_OUTPUT
 
@@ -137,6 +154,6 @@ AC_MSG_NOTICE([Configured to build AC_PACKAGE_STRING:
 ])
 
 # For VPATH builds
-for d in neon neon/src lib src; do
+for d in neon neon/src lib src win32; do
     test -d $d || mkdir -p $d
 done

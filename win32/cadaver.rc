@@ -1,0 +1,8 @@
+/* The resource script that embeds win32/cadaver.manifest.
+ *
+ * 1 is CREATEPROCESS_MANIFEST_RESOURCE_ID and 24 is RT_MANIFEST; both
+ * are spelled as numbers because winresrc.h names them only in the
+ * headers a full Windows SDK brings, and this has to build against a
+ * bare MinGW-w64.
+ */
+1 24 "cadaver.manifest"

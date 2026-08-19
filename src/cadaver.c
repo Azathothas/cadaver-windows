@@ -666,7 +666,25 @@ static void parse_args(int argc, char **argv)
         case 'V': inform_and_exit(execute_about); break;
         case 'p': set_proxy(optarg); break;
         case 't': tolerant = 1; break;
-        case 'r': rcfile = ne_strdup(optarg); break;
+        case 'r':
+            /* Checked here rather than where it is read, so that a
+             * script pointed at a file that is not there stops before
+             * connecting to anything.  It used to print a message, run
+             * nothing at all and exit 0, because the failure was
+             * recorded against no command and nothing counted it. */
+            {
+                FILE *f = fopen(optarg, "r");
+
+                if (f == NULL) {
+                    fprintf(stderr,
+                            _("cadaver: could not read rcfile `%s': %s\n"),
+                            optarg, strerror(errno));
+                    exit(CAD_EXIT_USAGE);
+                }
+                fclose(f);
+            }
+            rcfile = ne_strdup(optarg);
+            break;
         case 'c':
             if (set_clobber(optarg)) exit(CAD_EXIT_USAGE);
             break;

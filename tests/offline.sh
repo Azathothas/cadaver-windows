@@ -163,6 +163,11 @@ status "an unknown option is a usage error" 2 "$CADAVER" --no-such-option
 status "more than one URL is a usage error" 2 "$CADAVER" one two
 status "an unknown clobber value is a usage error" 2 \
     "$CADAVER" --clobber=maybe
+# A script pointed at an rcfile that is not there used to print a
+# message, run nothing at all and exit 0: the failure belonged to no
+# command, and the exit status counts commands.
+status "an rcfile that cannot be read is a usage error" 2 \
+    "$CADAVER" -r "$TMP/nosuch.cad"
 status "--json and --trace=- cannot share standard output" 2 \
     "$CADAVER" --trace=- --json
 status "nor in the other order" 2 \

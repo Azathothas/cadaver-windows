@@ -1128,6 +1128,15 @@ static void write_json(FILE *fp)
     }
     fputs("]", fp);
 
+    /* What was printed outside any command: the connection banner, the
+     * closing message.  It was captured and then dropped, so --json
+     * lost it although AGENTS.md said the field was there.  ne_buffer's
+     * `used' counts the terminator, so 1 means empty. */
+    if (run_output && run_output->used > 1) {
+        fputs(",\"output\":", fp);
+        put_output(fp, run_output->data);
+    }
+
     fprintf(fp, ",\"summary\":{\"total\":%d,\"ok\":%d,\"failed\":%d}}\n",
             run_commands, ok, run_failures);
 

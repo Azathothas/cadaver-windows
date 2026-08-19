@@ -38,7 +38,7 @@ OBJECTS = src/cadaver.o src/common.o src/commands.o src/ls.o \
 LIBOBJS = lib/basename.o lib/glob.o lib/rpmatch.o \
 	lib/yesno.o lib/getpass.o lib/mkstemp.o lib/system.o \
 	@LIBOBJS@
-ALLOBJS = $(OBJECTS) $(LIBOBJS)
+ALLOBJS = $(OBJECTS) $(LIBOBJS) @RESOBJ@
 
 # Installation programs
 INSTALL_PROGRAM = @INSTALL_PROGRAM@
@@ -55,6 +55,12 @@ all: $(TARGET)
 .PHONY: all subdirs install clean distclean check \
 	test-offline test-glob test-netrc test-godav test-wsgidav
 
+# The Windows application manifest, which makes UTF-8 the process
+# code page.  @RESOBJ@ is empty everywhere else.
+win32/cadaver.res.o: $(top_srcdir)/win32/cadaver.rc \
+		$(top_srcdir)/win32/cadaver.manifest
+	@WINDRES@ -I $(top_srcdir)/win32 $(top_srcdir)/win32/cadaver.rc -o $@
+
 $(TARGET): $(ALLOBJS) $(TARGET_DEPS) | subdirs
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(ALLOBJS) $(LIBS)
 
@@ -67,7 +73,7 @@ subdirs:
 	@cd neon/src && $(MAKE) libneon.a
 
 clean:
-	rm -f $(OBJECTS) $(LIBOBJS) $(TARGET) *~
+	rm -f $(OBJECTS) $(LIBOBJS) @RESOBJ@ $(TARGET) *~
 	@cd neon/src && $(MAKE) clean
 
 distclean: clean

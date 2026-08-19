@@ -409,6 +409,9 @@
       ]
     }
   ],
+  "output": [
+    "Connection to `127.0.0.1' closed."
+  ],
   "summary": {
     "total": 23,
     "ok": 18,
