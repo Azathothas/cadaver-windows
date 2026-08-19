@@ -683,7 +683,7 @@ static void parse_args(int argc, char **argv)
         const char *url = argv[optind];
 
         run_begin(url);
-        cmd_begin();
+        cmd_begin(NULL);
         cmd_named("open", 1, &url);
         open_connection(url);
         cmd_end();
@@ -728,7 +728,7 @@ static int execute_command(const char *line)
     /* The record is opened before the line is parsed, because expanding
      * a wildcard prints as it goes and that output belongs to the
      * command which caused it. */
-    cmd_begin();
+    cmd_begin(line);
 
     tokens = parse_command(line, &argcount);
     if (argcount == 0) {

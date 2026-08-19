@@ -263,6 +263,7 @@ static void forget_request(void)
 
 void req_started(const char *method, const char *target)
 {
+    restype_note_request(method, target);
     forget_request();
     req_method = ne_strdup(method ? method : "");
     req_path = ne_strdup(target ? target : "");
@@ -291,9 +292,27 @@ void run_begin(const char *target)
  * exists with --json. */
 static int cur_nops, cur_nfailed;
 
-void cmd_begin(void)
+/* Closes cur_label with the bracket cmd_trace_label() promises,
+ * truncating the text if there is no room for it. */
+static void label_close(void)
 {
-    cur_label[0] = '\0';
+    size_t len = strlen(cur_label);
+
+    if (len + 2 >= sizeof cur_label) len = sizeof cur_label - 2;
+    cur_label[len] = ')';
+    cur_label[len + 1] = '\0';
+}
+
+void cmd_begin(const char *line)
+{
+    /* The number is claimed here rather than in cmd_named(), so that
+     * the requests a wildcard expansion makes carry it too, tagged
+     * with the line as typed until there is something better.
+     * cmd_discard() gives it back for a line that held no command. */
+    cur_number++;
+    ne_snprintf(cur_label, sizeof cur_label, "%d (%s", cur_number,
+                line ? line : "");
+    label_close();
 
     if (!out_json) return;
 
@@ -313,7 +332,6 @@ void cmd_named(const char *name, int argc, const char **argv)
     int n;
 
     run_commands++;
-    cur_number++;
 
     /* The label the trace tags this command's requests with.  It is
      * built in every mode, because --trace does not need --json. */
@@ -323,10 +341,7 @@ void cmd_named(const char *name, int argc, const char **argv)
         if (len + 2 >= sizeof cur_label) break;
         ne_snprintf(cur_label + len, sizeof cur_label - len, " %s", argv[n]);
     }
-    len = strlen(cur_label);
-    if (len + 2 >= sizeof cur_label) len = sizeof cur_label - 2;
-    cur_label[len] = ')';
-    cur_label[len + 1] = '\0';
+    label_close();
 
     if (!cur) return;
 
@@ -342,6 +357,10 @@ void cmd_named(const char *name, int argc, const char **argv)
 void cmd_discard(void)
 {
     struct command_rec *c;
+
+    /* The line held no command, so it gets no number. */
+    cur_number--;
+    cur_label[0] = '\0';
 
     if (!cur) return;
 
@@ -385,6 +404,7 @@ void cmd_end(void)
     cur_op = NULL;
     cur_nops = cur_nfailed = 0;
     forget_request();
+    restype_forget_all();
 }
 
 void cmd_failed(const char *context)

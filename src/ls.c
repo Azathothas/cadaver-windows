@@ -39,6 +39,7 @@
 #include "i18n.h"
 #include "commands.h"
 #include "cadaver.h"
+#include "utils.h"
 #include "basename.h"
 #include "utils.h"
 
@@ -318,6 +319,17 @@ int fetch_resource_list(ne_session *sess, const char *uri,
     ret = ne_propfind_named(pfh, ls_props, results, &ctx);
 
     ne_propfind_destroy(pfh);
+
+    /* The listing says what each member is, and something is
+     * usually about to ask.  Expanding a remote wildcard used to
+     * throw this away and then make one PROPFIND per member to
+     * learn it again. */
+    if (ret == NE_OK) {
+        const struct resource *res;
+
+        for (res = *reslist; res != NULL; res = res->next)
+            restype_remember(res->uri, res->type);
+    }
 
     return ret;
 }

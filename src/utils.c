@@ -22,6 +22,7 @@
 
 #include "config.h"
 
+#include <string.h>
 #include <time.h>
 #include <sys/types.h>
 
@@ -29,39 +30,188 @@
 #include <sys/time.h>
 #endif
 
+#include <ne_alloc.h>
 #include <ne_basic.h>
 #include <ne_string.h>
 #include <ne_uri.h>
+#include <ne_utils.h>
 
 #include "i18n.h"
 #include "cadaver.h"
 #include "utils.h"
+
+/* --- What one command has learned ---------------------------------
+ *
+ * A linked list rather than a hash: one command asks about a handful of
+ * paths, or about the members of one collection, and the list is thrown
+ * away when the command ends.  The cap is there so that a wildcard
+ * matching a very wide collection cannot make it unbounded. */
+
+#define RESTYPE_CACHE_MAX 4096
+
+struct restype_entry {
+    char *uri;
+    enum resource_type type;
+    struct restype_entry *next;
+};
+
+static struct restype_entry *restype_cache;
+static int restype_count;
+
+void restype_remember(const char *uri_path, enum resource_type type)
+{
+    struct restype_entry *entry;
+
+    if (type == resr_error || uri_path == NULL) return;
+    if (restype_count >= RESTYPE_CACHE_MAX) return;
+
+    for (entry = restype_cache; entry; entry = entry->next) {
+        if (ne_path_compare(entry->uri, uri_path) == 0) {
+            entry->type = type;
+            return;
+        }
+    }
+
+    entry = ne_malloc(sizeof *entry);
+    entry->uri = ne_strdup(uri_path);
+    entry->type = type;
+    entry->next = restype_cache;
+    restype_cache = entry;
+    restype_count++;
+}
+
+void restype_forget_all(void)
+{
+    struct restype_entry *entry = restype_cache, *next;
+
+    while (entry) {
+        next = entry->next;
+        ne_free(entry->uri);
+        ne_free(entry);
+        entry = next;
+    }
+
+    restype_cache = NULL;
+    restype_count = 0;
+}
+
+/* Forgets `uri_path' and everything under it. */
+static void restype_forget_under(const char *uri_path)
+{
+    size_t len = strlen(uri_path);
+    struct restype_entry **link = &restype_cache, *entry;
+
+    if (len == 0) {
+        restype_forget_all();
+        return;
+    }
+
+    while ((entry = *link) != NULL) {
+        int under = ne_path_compare(entry->uri, uri_path) == 0
+            || (strncmp(entry->uri, uri_path, len) == 0
+                && (uri_path[len - 1] == '/' || entry->uri[len] == '/'));
+
+        if (under) {
+            *link = entry->next;
+            ne_free(entry->uri);
+            ne_free(entry);
+            restype_count--;
+        }
+        else {
+            link = &entry->next;
+        }
+    }
+}
+
+void restype_note_request(const char *method, const char *target)
+{
+    /* Nothing about a resource changes because it was read. */
+    static const char *const safe[] = {
+        "PROPFIND", "GET", "HEAD", "OPTIONS", "REPORT", "SEARCH", NULL
+    };
+    /* These change the request target and what is under it, and reach
+     * no further, so the rest of what has been remembered still holds.
+     * That matters: a wildcard delete used to make one PROPFIND per
+     * file after the first, because each DELETE threw away what the
+     * listing had just said about all the others. */
+    static const char *const local[] = {
+        "PUT", "DELETE", "MKCOL", "PROPPATCH", "LOCK", "UNLOCK", NULL
+    };
+    int n;
+
+    if (method == NULL) return;
+
+    for (n = 0; safe[n] != NULL; n++)
+        if (strcmp(method, safe[n]) == 0) return;
+
+    for (n = 0; local[n] != NULL; n++) {
+        if (strcmp(method, local[n]) == 0) {
+            if (target) restype_forget_under(target);
+            else restype_forget_all();
+            return;
+        }
+    }
+
+    /* COPY and MOVE name their destination in a header rather than in
+     * the request target, and the DeltaV methods act on resources this
+     * has no way to name, so everything goes. */
+    restype_forget_all();
+}
+
+/* The remembered type of `uri_path', or -1 if it is not remembered.
+ * Not resr_error: that is a type of its own and is never cached. */
+static int restype_lookup(const char *uri_path)
+{
+    const struct restype_entry *entry;
+
+    for (entry = restype_cache; entry; entry = entry->next)
+        if (ne_path_compare(entry->uri, uri_path) == 0)
+            return (int)entry->type;
+
+    return -1;
+}
 
 /* Returns non-zero if given resource is not a collection resource.
  * This function MAY make a request to the server. */
 enum resource_type getrestype(const char *uri_path)
 {
     struct resource *res = NULL;
-    int ret = 0;
+    int ret = restype_lookup(uri_path);
+
+    if (ret >= 0) {
+        NE_DEBUG(DEBUG_FILES, "cadaver: %s is a %s, already asked\n",
+                 uri_path, ret == resr_collection ? "collection" : "resource");
+        return (enum resource_type)ret;
+    }
+
     /* TODO: just request resourcetype here. */
     ret = fetch_resource_list(session.sess, uri_path, NE_DEPTH_ZERO, 1, &res);
-    if (ret == NE_OK) {
-	if (res != NULL && ne_path_compare(uri_path, res->uri) == 0) {
-	    ret = res->type;
-	} else {
-	    /* FIXME: this error occurs when you do open /foo and get
-	     * the response for /foo/ back. */
-	    ne_set_error(session.sess, 
-                         _("Unknown resource found at '%s' without WebDAV support"),
-                         res->uri);
-	    ret = resr_error;
-	}
+    if (ret != NE_OK) {
+        ret = resr_error;
+    }
+    else if (res != NULL && ne_path_compare(uri_path, res->uri) == 0) {
+        ret = res->type;
+    }
+    else if (res != NULL) {
+        /* This happens when you open /foo and get the response for
+         * /foo/ back. */
+        ne_set_error(session.sess,
+                     _("Unknown resource found at '%s' without WebDAV support"),
+                     res->uri);
+        ret = resr_error;
     }
     else {
-	ret = resr_error;
+        /* A multistatus that named nothing at all.  Reading res->uri
+         * here, as this used to, is a null dereference. */
+        ne_set_error(session.sess,
+                     _("The server reported nothing about '%s'"), uri_path);
+        ret = resr_error;
     }
+
     free_resource_list(res);
-    return ret;
+    restype_remember(uri_path, (enum resource_type)ret);
+
+    return (enum resource_type)ret;
 }
 
 

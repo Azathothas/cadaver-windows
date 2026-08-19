@@ -100,13 +100,18 @@ int run_finish(void);
  * touched the network or not.
  *
  * cmd_begin() opens the record before the line has been parsed, because
- * expanding a wildcard prints as it goes and that output belongs to the
- * command that caused it.  cmd_named() then says what the command
- * turned out to be: `argv' is the argument vector without the command
- * name and `argc' its length.  A line that held no command at all --
- * blank, or nothing but a comment -- is dropped with cmd_discard()
- * rather than recorded as having run. */
-void cmd_begin(void);
+ * expanding a wildcard prints as it goes, and makes a request per
+ * collection it looks inside, and both belong to the command that
+ * caused them.  `line' is the command line as typed, which is all
+ * there is to label those requests with until it has been parsed;
+ * NULL where there is no line, as for the URL on the command line.
+ *
+ * cmd_named() then says what the command turned out to be: `argv' is
+ * the argument vector without the command name and `argc' its length.
+ * A line that held no command at all -- blank, or nothing but a
+ * comment -- is dropped with cmd_discard() rather than recorded as
+ * having run. */
+void cmd_begin(const char *line);
 void cmd_named(const char *name, int argc, const char **argv);
 void cmd_discard(void);
 void cmd_end(void);

@@ -24,8 +24,39 @@
 #include "cadaver.h"
 
 /* Returns resource type of resource with given URI; where resr_error
- * means "resource not found." */
+ * means "resource not found."  Answers from what the command in
+ * progress has already been told, where it has been told; see
+ * restype_remember() below. */
 enum resource_type getrestype(const char *uri);
+
+/* What one command has learned about the resources it is working on.
+ *
+ * A command asks what a path is before doing anything with it, and one
+ * PROPFIND per question is the whole cost of a command over a slow
+ * link.  Expanding a remote wildcard was the worst of it: the depth-1
+ * PROPFIND that lists a collection already says what each member is,
+ * and lib/glob.c then asked again, once per member, through
+ * davglob_stat().
+ *
+ * Only positive answers are kept.  A resource that could not be found
+ * is the one case where the caller wants the session error that goes
+ * with it, and the one that changes when a command creates something.
+ */
+
+/* Remembers that `uri_path' is `type'.  A no-op for resr_error. */
+void restype_remember(const char *uri_path, enum resource_type type);
+
+/* Forgets everything.  Called at the end of every command, and from
+ * req_started() as soon as a method is sent that could change what any
+ * of it means: answering from memory about a server other people are
+ * writing to is what this must not do. */
+void restype_forget_all(void);
+
+/* Drops whatever a request is about to make untrue.  A safe method
+ * -- PROPFIND, GET, HEAD, OPTIONS, REPORT, SEARCH -- leaves the cache
+ * alone; one that changes the request target and nothing else drops
+ * that target and what is under it; anything else drops the lot. */
+void restype_note_request(const char *method, const char *target);
 
 /* Returns time to display */
 char *format_time(time_t when);

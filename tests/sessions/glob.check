@@ -1,0 +1,57 @@
+# What the wildcard expansion asked the server, which the transcript
+# does not show.
+log="$WORK/wire.log"
+
+if [ ! -s "$log" ]; then
+    echo "the trace file $log is missing or empty"
+    exit 1
+fi
+
+fail=0
+
+# Every request carries the command that caused it.  A wildcard makes
+# its requests before the line has been parsed, and those used to be
+# tagged "no command" -- which is when the tag is most wanted, because a
+# wide expansion is where the requests are.
+if grep -q -- '--- no command ---' "$log"; then
+    echo "some requests are tagged 'no command'"
+    fail=1
+fi
+
+if ! grep -qF -- '--- 15 (delete *.txt) ---' "$log"; then
+    echo "the expansion's requests are not tagged with the pattern"
+    fail=1
+fi
+
+# How many PROPFINDs one command made.  The label appears in two forms
+# for a command with a wildcard in it -- the pattern before expansion
+# and the names after -- so both are counted.
+propfinds() {
+    awk -v n="$1" '
+        $0 ~ "^--- " n " \\(" { inside = 1; next }
+        /^--- / { inside = 0 }
+        inside && /^> PROPFIND / { count++ }
+        END { print count + 0 }
+    ' "$log"
+}
+
+# `delete *.txt' lists the collection once and deletes the two matches.
+# It used to ask the server what each match was twice more -- once for
+# the wildcard, through the glob's stat callback, and once to resolve
+# the path before deleting it -- because nothing remembered what the
+# listing had just said.  Five PROPFINDs became one.
+got=`propfinds 15`
+if [ "$got" != "1" ]; then
+    echo "delete *.txt made $got PROPFINDs, wanted 1"
+    fail=1
+fi
+
+# The same with a collection named in the pattern, which costs one more:
+# the glob asks what `keep' is before it can list it.
+got=`propfinds 12`
+if [ "$got" != "2" ]; then
+    echo "delete keep/*.txt made $got PROPFINDs, wanted 2"
+    fail=1
+fi
+
+exit $fail
