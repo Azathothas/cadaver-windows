@@ -265,6 +265,14 @@ of them.  All five that were bugs are fixed here.
   The same escaping arguably belongs in neon's ne_locks.c, which would
   fix it for every neon client.  Worth reporting there.
 
+  The same defect was in `label' and in `search' -- the label, the
+  value in a comparison, and the scope, which is a URI path and so can
+  hold an ampersand -- and in the property names a search query and
+  `set searchorder' name, which become element names and can only be
+  refused.  All four are fixed here.  None of them was reachable until
+  this tree had a server that answers SEARCH and LABEL, which is the
+  argument for tests/godav/deltav.go on its own.
+
 * #54, `mv collection/ newname/' fails (open since 2024-11-27, reported
   by the upstream maintainer).  FIXED in 0.28-win2.  do_copymove() now
   distinguishes a destination that exists and is not a collection,
