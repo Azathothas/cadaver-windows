@@ -168,8 +168,14 @@ def normalise_json(obj, text):
             else:
                 normalise_json(value, text)
     elif isinstance(obj, list):
-        for item in obj:
-            normalise_json(item, text)
+        for index, item in enumerate(obj):
+            # A string reached through a list rather than through a
+            # member name is still a string: "args" holds the working
+            # directory `lcd' was given, which is a path like any other.
+            if isinstance(item, str):
+                obj[index] = text(item)
+            else:
+                normalise_json(item, text)
     return obj
 
 

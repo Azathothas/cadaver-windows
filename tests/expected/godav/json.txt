@@ -9,7 +9,7 @@
     {
       "command": "open",
       "args": [
-        "http://127.0.0.1:8907/json/"
+        "http://127.0.0.1:<PORT>/json/"
       ],
       "target": null,
       "status": "ok",
@@ -21,7 +21,7 @@
     {
       "command": "lcd",
       "args": [
-        "C:\\Users\\AjamX\\Downloads\\TEMP\\cadaver\\session-results\\godav\\json"
+        "<WORK>"
       ],
       "target": null,
       "status": "ok",

@@ -9,7 +9,7 @@ Enter locktoken:
     {
       "command": "open",
       "args": [
-        "http://127.0.0.1:8908/json/"
+        "http://127.0.0.1:<PORT>/json/"
       ],
       "target": null,
       "status": "ok",
@@ -21,7 +21,7 @@ Enter locktoken:
     {
       "command": "lcd",
       "args": [
-        "C:\\Users\\AjamX\\Downloads\\TEMP\\cadaver\\session-results\\wsgidav\\json"
+        "<WORK>"
       ],
       "target": null,
       "status": "ok",
