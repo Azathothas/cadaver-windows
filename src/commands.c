@@ -390,7 +390,9 @@ static const char *get_timeout(long t)
     case NE_TIMEOUT_INFINITE: return _("infinite");
     case NE_TIMEOUT_INVALID: return _("invalid");
     default:
-	sprintf(buf, _("%ld seconds"), t);
+	/* A long cannot overflow 128 bytes here, but a bounded call
+	 * costs nothing and leaves one fewer thing to reason about. */
+	ne_snprintf(buf, sizeof buf, _("%ld seconds"), t);
 	return buf;
     }
 }
