@@ -1,0 +1,22 @@
+# The transcript says what was transferred; this says the bytes came
+# back the same.  every-byte.dat holds all 256 byte values, which is
+# what catches a transfer that went through a text-mode translation.
+for name in hello.txt second.txt every-byte.dat partial.dat; do
+    if ! cmp "$WORK/$name" "$WORK/roundtrip/$name"; then
+        echo "recurse.check: $name did not survive the round trip" >&2
+        exit 1
+    fi
+done
+
+if ! cmp "$WORK/with space/has space.txt" \
+         "$WORK/roundtrip/with space/has space.txt"; then
+    echo "recurse.check: the name with a space did not survive" >&2
+    exit 1
+fi
+
+# rget created the destination directory itself: the session names one
+# that was not there.
+if [ ! -d "$WORK/roundtrip/with space" ]; then
+    echo "recurse.check: rget did not create the nested directory" >&2
+    exit 1
+fi

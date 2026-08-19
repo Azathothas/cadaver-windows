@@ -1,0 +1,21 @@
+# Recursive upload and download.  The fixtures every session gets
+# include a "with space" directory, so the tree carries a name that has
+# to be escaped on the way out and unescaped on the way back.
+lcd @WORK@
+rput . uploaded
+ls uploaded
+ls "uploaded/with space"
+# A second run finds every collection already there, which is the
+# ordinary case and must not be reported as a failure.
+rput . uploaded
+# Back again, into a directory that does not exist yet.
+rget uploaded roundtrip
+# A single resource is what `get' and `put' do, and the recursive forms
+# do it rather than refusing.
+rget uploaded/hello.txt one-file.txt
+rput hello.txt uploaded/one-file.txt
+# A collection whose parent does not exist cannot be created, and
+# nothing under it is tried.
+rput . nosuchparent/uploaded
+rmcol uploaded
+quit

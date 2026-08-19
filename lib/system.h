@@ -128,6 +128,11 @@ int cad_fd_info(int fd, struct cad_finfo *info);
  * takes the length as a 64-bit integer of its own. */
 int cad_truncate(int fd, ne_off_t length);
 
+/* Creates the directory `path'.  Returns zero, or -1 with errno set --
+ * EEXIST when it is already there, which a recursive download treats as
+ * success.  Separate because the Windows mkdir() takes no mode. */
+int cad_mkdir(const char *path);
+
 /* Renames `from' to `to', replacing `to' if it is there.  Returns zero,
  * or -1 with errno set.  Separate because the C runtime's rename() on
  * Windows fails with EEXIST rather than replacing, which would make

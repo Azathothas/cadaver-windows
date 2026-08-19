@@ -34,6 +34,7 @@
 #ifdef _WIN32
 #include <windows.h>
 #include <io.h>
+#include <direct.h> /* _mkdir */
 #include <fcntl.h>
 #endif
 
@@ -329,6 +330,11 @@ int cad_file_info(const char *path, struct cad_finfo *info)
     return 0;
 }
 
+int cad_mkdir(const char *path)
+{
+    return _mkdir(path);
+}
+
 int cad_fd_info(int fd, struct cad_finfo *info)
 {
     struct _stati64 st;
@@ -456,6 +462,11 @@ int cad_file_info(const char *path, struct cad_finfo *info)
     info->is_reg = S_ISREG(st.st_mode) ? 1 : 0;
 
     return 0;
+}
+
+int cad_mkdir(const char *path)
+{
+    return mkdir(path, 0777);
 }
 
 int cad_fd_info(int fd, struct cad_finfo *info)

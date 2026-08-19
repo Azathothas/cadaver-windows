@@ -100,7 +100,7 @@ const static struct {
 #if 0
 C(propedit), 
 #endif
-C(propnames), C(edit),
+C(propnames), C(edit), C(rget), C(rput),
 #undef C
     /* And now the real aliases */
     { cmd_less, "more" }, { cmd_mkcol, "mkdir" }, 
@@ -1211,15 +1211,14 @@ static void execute_rename(const char *native_src, const char *native_dest)
  * but "a failed resumeget leaves the local file as it was" is a
  * guarantee worth keeping here rather than by inspection of a vendored
  * library that this tree is expected to update. */
-static void do_get(const char *native_remote, const char *native_local, int resume)
+static void do_get_uri(const char *uri_path, const char *native_remote,
+                       const char *native_local, int resume)
 {
-    char *filename = NULL, *tmpname = NULL, *uri_path;
+    char *filename = NULL, *tmpname = NULL;
     ne_content_range range;
     struct cad_finfo info;
     ne_off_t resume_from = 0;
     int fd = -1, ret, exists;
-
-    uri_path = uri_resolve_native(native_remote);
 
     if (native_local) {
         filename = ne_strdup(native_local);
@@ -1339,9 +1338,17 @@ static void do_get(const char *native_remote, const char *native_local, int resu
 
 fail:
     if (fd >= 0) (void) close(fd);
-    ne_free(uri_path);
     if (tmpname) ne_free(tmpname);
     if (filename) ne_free(filename);
+}
+
+static void do_get(const char *native_remote, const char *native_local,
+                   int resume)
+{
+    char *uri_path = uri_resolve_native(native_remote);
+
+    do_get_uri(uri_path, native_remote, native_local, resume);
+    ne_free(uri_path);
 }
 
 static void execute_get(const char *remote, const char *local)
@@ -1352,6 +1359,263 @@ static void execute_get(const char *remote, const char *local)
 static void execute_resumeget(const char *remote, const char *local)
 {
     return do_get(remote, local, 1);
+}
+
+/* Defined below, with the single-file commands they repeat. */
+static void simple_put(const char *local, const char *remote);
+static void execute_put(const char *local, const char *remote);
+static int compare_names(const void *a, const void *b);
+
+/* How deep `rget' and `rput' will go.  A junction on Windows, or a
+ * symbolic link elsewhere, can make a directory contain itself, and a
+ * server is free to report a collection that does the same; walking
+ * either forever is worse than refusing at a depth no real tree
+ * reaches. */
+#define RECURSE_MAX 64
+
+/* The names in the local directory `dir', sorted, with "." and ".."
+ * left out.  Returns the count and fills in `*names', which the caller
+ * frees with free_names(); -1 with errno set if the directory could not
+ * be read. */
+static int read_local_dir(const char *dir, char ***names)
+{
+    char **list = NULL;
+    size_t count = 0, alloc = 0;
+    struct dirent *ent;
+    DIR *dp = opendir(dir);
+
+    if (dp == NULL) return -1;
+
+    while ((ent = readdir(dp)) != NULL) {
+        if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0)
+            continue;
+
+        if (count == alloc) {
+            alloc = alloc ? alloc * 2 : 64;
+            list = ne_realloc(list, alloc * sizeof *list);
+        }
+
+        list[count++] = ne_strdup(ent->d_name);
+    }
+
+    closedir(dp);
+
+    if (count > 1) qsort(list, count, sizeof *list, compare_names);
+
+    *names = list;
+    return (int)count;
+}
+
+static void free_names(char **names, int count)
+{
+    int n;
+    for (n = 0; n < count; n++) ne_free(names[n]);
+    ne_free(names);
+}
+
+/* Appends the native name `name' to the URI path `parent', which has to
+ * end in a slash, escaping it as one path segment. */
+static char *uri_child(const char *parent, const char *name, int collection)
+{
+    char *utf8 = utf8_from_native(name);
+    char *escaped = ne_path_escape(utf8);
+    char *ret = ne_concat(parent, escaped, collection ? "/" : "", NULL);
+
+    ne_free(utf8);
+    ne_free(escaped);
+
+    return ret;
+}
+
+/* Joins a local directory and a name.  A forward slash separates them
+ * on Windows as well: every call underneath is a C runtime one, and
+ * those take either separator. */
+static char *local_child(const char *dir, const char *name)
+{
+    return ne_concat(dir, "/", name, NULL);
+}
+
+/* MKCOL that treats a collection which is already there as success, and
+ * says whether the collection can now be written into.  A recursive
+ * upload into an existing tree is the ordinary case, and a 405 for every
+ * directory in it would be noise and would count as a failure. */
+static int mkcol_existing_ok(const char *uri_path)
+{
+    int ret, status;
+
+    out_start_uri(_("Creating"), uri_path);
+    ret = ne_mkcol(session.sess, uri_path);
+    status = req_last_status();
+
+    if (ret != NE_OK && status == 405) {
+        out_success_as(_("it is already there.\n"));
+        return 1;
+    }
+
+    return out_handle(ret);
+}
+
+/* Uploads the local directory `local' into the collection `uri_dest',
+ * which has to end in a slash and is created if it is not there. */
+static void rput_tree(const char *local, const char *uri_dest, int depth)
+{
+    char **names;
+    int count, n;
+
+    if (depth > RECURSE_MAX) {
+        out_start(_("Uploading"), local);
+        out_fail(_("more than %d directories deep; refusing to go on in "
+                   "case the tree contains itself.\n"), RECURSE_MAX);
+        return;
+    }
+
+    /* Nothing under a collection that is not there can succeed, so a
+     * MKCOL that failed skips the whole subtree rather than producing
+     * one failure per file in it.  A sibling directory is still tried:
+     * the failure may be about this name alone. */
+    if (!mkcol_existing_ok(uri_dest)) return;
+
+    count = read_local_dir(local, &names);
+    if (count < 0) {
+        out_start(_("Reading"), local);
+        out_fail("%s\n", strerror(errno));
+        return;
+    }
+
+    for (n = 0; n < count && !cad_transfer_interrupted(); n++) {
+        char *path = local_child(local, names[n]);
+        struct cad_finfo info;
+
+        if (cad_file_info(path, &info) != 0) {
+            out_start(_("Reading"), path);
+            out_fail("%s\n", strerror(errno));
+        }
+        else if (info.is_dir) {
+            char *child = uri_child(uri_dest, names[n], 1);
+            rput_tree(path, child, depth + 1);
+            ne_free(child);
+        }
+        else {
+            char *child = uri_child(uri_dest, names[n], 0);
+            simple_put(path, child);
+            ne_free(child);
+        }
+
+        ne_free(path);
+    }
+
+    free_names(names, count);
+}
+
+static void execute_rput(const char *local, const char *remote)
+{
+    struct cad_finfo info;
+    char *uri_dest;
+
+    if (cad_file_info(local, &info) != 0) {
+        out_start(_("Uploading"), local);
+        out_fail("%s\n", strerror(errno));
+        return;
+    }
+
+    if (!info.is_dir) {
+        /* Not an error worth refusing: a lone file is what `put' does,
+         * and doing it is friendlier than saying so. */
+        execute_put(local, remote);
+        return;
+    }
+
+    uri_dest = uri_resolve_native_coll(remote ? remote : base_name(local));
+    rput_tree(local, uri_dest, 0);
+    ne_free(uri_dest);
+}
+
+/* Downloads the collection `uri_src', which ends in a slash, into the
+ * local directory `local', creating it if it is not there. */
+static void rget_tree(const char *uri_src, const char *local, int depth)
+{
+    struct resource *list, *res;
+    size_t rootlen = strlen(uri_src);
+    int ret;
+
+    if (depth > RECURSE_MAX) {
+        out_start_uri(_("Downloading collection"), uri_src);
+        out_fail(_("more than %d collections deep; refusing to go on in "
+                   "case the tree contains itself.\n"), RECURSE_MAX);
+        return;
+    }
+
+    if (cad_mkdir(local) != 0 && errno != EEXIST) {
+        out_start(_("Creating local directory"), local);
+        out_fail("%s\n", strerror(errno));
+        return;
+    }
+
+    out_start_uri(_("Listing collection"), uri_src);
+    ret = fetch_resource_list(session.sess, uri_src, 1, 0, &list);
+    if (!out_handle(ret)) return;
+
+    for (res = list; res != NULL && !cad_transfer_interrupted();
+         res = res->next) {
+        char *name, *path;
+
+        /* fetch_resource_list() returns the collection itself as well
+         * as its members; anything no longer than the root is it. */
+        if (strlen(res->uri) <= rootlen) continue;
+
+        name = native_path_from_uri(res->uri + rootlen);
+        /* A collection's URI ends in a slash, which is not part of the
+         * name it gets locally. */
+        if (*name) {
+            char *end = name + strlen(name);
+            while (end > name && end[-1] == '/') *--end = '\0';
+        }
+
+        if (*name == '\0') {
+            ne_free(name);
+            continue;
+        }
+
+        path = local_child(local, name);
+
+        if (res->type == resr_collection) {
+            char *child = ne_concat(res->uri,
+                                    ne_path_has_trailing_slash(res->uri)
+                                        ? "" : "/", NULL);
+            rget_tree(child, path, depth + 1);
+            ne_free(child);
+        }
+        else if (res->type == resr_error) {
+            out_start_uri(_("Downloading"), res->uri);
+            out_fail("%d %s\n", res->error_status,
+                     res->error_reason ? res->error_reason : "");
+        }
+        else {
+            do_get_uri(res->uri, name, path, 0);
+        }
+
+        ne_free(path);
+        ne_free(name);
+    }
+
+    free_resource_list(list);
+}
+
+static void execute_rget(const char *remote, const char *local)
+{
+    enum resource_type type;
+    char *uri_src = uri_resolve_native_true(remote, &type);
+
+    if (type != resr_collection) {
+        /* A plain resource is what `get' does; doing it beats refusing
+         * on a technicality. */
+        ne_free(uri_src);
+        execute_get(remote, local);
+        return;
+    }
+
+    rget_tree(uri_src, local ? local : base_name(remote), 0);
+    ne_free(uri_src);
 }
 
 static void simple_put(const char *local, const char *remote)
@@ -1822,6 +2086,12 @@ const struct command commands[] = {
     { cmd_resumeget, "resumeget", true, 1, 2, parmscope_none, "rl", T2(execute_resumeget),
       N_("resumeget remote [local]"), N_("Resume download of remote resource") },
     C1M(mget, N_("mget remote..."), N_("Download many remote resources")),
+    { cmd_rget, "rget", true, 1, 2, parmscope_none, "rl",
+      T2(execute_rget), N_("rget remote [local]"),
+      N_("Download a collection and everything under it") },
+    { cmd_rput, "rput", true, 1, 2, parmscope_none, "lr",
+      T2(execute_rput), N_("rput local [remote]"),
+      N_("Upload a directory and everything under it") },
     { cmd_mput, "mput", true, 1, CMD_VARY, parmscope_local, "l", TV(multi_mput), 
       N_("mput local..."), N_("Upload many local files") },
     C1(edit, N_("edit resource"), N_("Edit given resource")),
