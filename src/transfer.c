@@ -68,7 +68,7 @@ static void transfer_interrupt(int sig)
     signal(sig, transfer_interrupt);
 
     if (interrupted && old_sigint != SIG_DFL && old_sigint != SIG_IGN
-        && old_sigint != SIG_ERR) {
+        && old_sigint != SIG_ERR && old_sigint != transfer_interrupt) {
         (*old_sigint)(sig);
         return;
     }
@@ -90,6 +90,11 @@ static void interrupt_end(void)
 int cad_transfer_interrupted(void)
 {
     return interrupted != 0;
+}
+
+void cad_transfer_forget(void)
+{
+    interrupted = 0;
 }
 
 /* Says the transfer was abandoned.  The caller reports it the way it
@@ -126,15 +131,18 @@ static int write_block(int fd, const char *block, ssize_t len)
 static ne_off_t *body_counter;
 
 /* The body of a response, block by block, into `fd' or discarded when
- * `fd' is negative.  Returns an NE_* code. */
-static int read_body(ne_request *req, int fd)
+ * `fd' is negative.  `keep' says whether this is the body the caller
+ * asked for or the one a non-2xx response carries, which is read only
+ * to leave the connection usable and must not be counted.  Returns an
+ * NE_* code. */
+static int read_body(ne_request *req, int fd, int keep)
 {
     char buf[TRANSFER_BLOCK];
     ssize_t len;
 
     while ((len = ne_read_response_block(req, buf, sizeof buf)) > 0) {
         if (interrupted) return say_interrupted();
-        if (body_counter) *body_counter += len;
+        if (keep && body_counter) *body_counter += len;
         if (fd >= 0 && write_block(fd, buf, len) != NE_OK) return NE_ERROR;
     }
 
@@ -169,9 +177,9 @@ static int dispatch_get(ne_request *req, int fd, const char *brange)
         }
 
         if ((brange && st->code == 206) || (!brange && st->klass == 2))
-            ret = read_body(req, fd);
+            ret = read_body(req, fd, 1);
         else
-            ret = read_body(req, -1);
+            ret = read_body(req, -1, 0);
 
         if (ret == NE_OK) ret = ne_end_request(req);
     } while (ret == NE_RETRY);

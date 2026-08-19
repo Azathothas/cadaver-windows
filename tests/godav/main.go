@@ -30,6 +30,12 @@
 // one, a progress indicator, and a throughput measurement all need a
 // transfer that lasts.
 //
+// -escapeprefix makes one subtree name a member outside itself in
+// every PROPFIND: an href that unescapes to "../../escaped.txt".
+// `rget' writes local files under names the server chose, so a server
+// that chooses one like that is the case worth having a test for, and
+// no real server produces one.
+//
 // The prefixes are given without a leading slash, which is added here.
 // A leading slash would look like an absolute path to the MSYS2 and Git
 // Bash argument conversion, which rewrites one into a Windows path
@@ -37,11 +43,14 @@
 package main
 
 import (
+	"bytes"
 	"flag"
+	"fmt"
 	"io"
 	"log"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -153,6 +162,69 @@ func (h *slowHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.next.ServeHTTP(w, r)
 }
 
+// escapeHandler appends one hostile response to the multistatus the
+// handler behind it produced.  Buffering the body is what makes that
+// possible, and a PROPFIND body is small.
+type escapeHandler struct {
+	next   http.Handler
+	prefix string
+}
+
+type captureWriter struct {
+	header http.Header
+	status int
+	body   bytes.Buffer
+}
+
+func (w *captureWriter) Header() http.Header { return w.header }
+
+func (w *captureWriter) WriteHeader(status int) { w.status = status }
+
+func (w *captureWriter) Write(p []byte) (int, error) { return w.body.Write(p) }
+
+// The member: an href that unescapes to a path leaving the collection,
+// and one that unescapes to a name with a Windows separator in it.
+const escapeResponses = `<D:response><D:href>%s..%%2F..%%2Fescaped.txt` +
+	`</D:href><D:propstat><D:prop><D:resourcetype/>` +
+	`<D:getcontentlength>5</D:getcontentlength></D:prop>` +
+	`<D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>` +
+	`<D:response><D:href>%ssub%%5Cdir%%5Cout.txt` +
+	`</D:href><D:propstat><D:prop><D:resourcetype/>` +
+	`<D:getcontentlength>5</D:getcontentlength></D:prop>` +
+	`<D:status>HTTP/1.1 200 OK</D:status></D:propstat></D:response>`
+
+func (h *escapeHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method != "PROPFIND" || !strings.HasPrefix(r.URL.Path, h.prefix) {
+		h.next.ServeHTTP(w, r)
+		return
+	}
+
+	capture := &captureWriter{header: make(http.Header), status: 200}
+	h.next.ServeHTTP(capture, r)
+
+	body := capture.body.String()
+	const end = "</D:multistatus>"
+
+	if capture.status == http.StatusMultiStatus &&
+		strings.Contains(body, end) {
+		base := r.URL.Path
+		if !strings.HasSuffix(base, "/") {
+			base += "/"
+		}
+		injected := fmt.Sprintf(escapeResponses, base, base)
+		body = strings.Replace(body, end, injected+end, 1)
+	}
+
+	for name, values := range capture.header {
+		for _, value := range values {
+			w.Header().Add(name, value)
+		}
+	}
+	w.Header().Set("Content-Length", strconv.Itoa(len(body)))
+	w.WriteHeader(capture.status)
+	_, _ = io.WriteString(w, body)
+}
+
 func (h *authHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if h.prefix == "" || !strings.HasPrefix(r.URL.Path, h.prefix) {
 		h.next.ServeHTTP(w, r)
@@ -186,6 +258,8 @@ func main() {
 		"bytes to write between pauses under -slowprefix")
 	slowDelay := flag.Duration("slowdelay", 20*time.Millisecond,
 		"how long to pause between chunks under -slowprefix")
+	escapePrefix := flag.String("escapeprefix", "",
+		"name a member outside the collection under /PREFIX")
 	flag.Parse()
 
 	var h http.Handler = &webdav.Handler{
@@ -198,6 +272,13 @@ func main() {
 	// cadaver's `search' and its version commands have something to
 	// talk to.  See deltav.go.
 	h = newDeltavHandler(h, *dir)
+
+	if *escapePrefix != "" {
+		h = &escapeHandler{
+			next:   h,
+			prefix: "/" + strings.TrimPrefix(*escapePrefix, "/"),
+		}
+	}
 
 	if *slowPrefix != "" {
 		h = &slowHandler{

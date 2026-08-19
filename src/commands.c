@@ -1435,6 +1435,27 @@ static char *local_child(const char *dir, const char *name)
     return ne_concat(dir, "/", name, NULL);
 }
 
+/* Whether a name a server gave for a member can be used as one segment
+ * of a local path.
+ *
+ * `rget' is the only command that writes a local file under a name the
+ * server chose rather than one the user typed, so it is the only place
+ * this matters.  A member href of "..%2F..%2Fevil" unescapes to
+ * "../../evil", and joining that to the destination writes outside the
+ * directory the user asked for.  A colon on Windows names an alternate
+ * data stream of the segment before it, which is not what the name
+ * says either. */
+static int safe_local_name(const char *name)
+{
+    if (*name == '\0') return 0;
+    if (strcmp(name, ".") == 0 || strcmp(name, "..") == 0) return 0;
+    if (strchr(name, '/') != NULL || strchr(name, '\\') != NULL) return 0;
+#ifdef _WIN32
+    if (strchr(name, ':') != NULL) return 0;
+#endif
+    return 1;
+}
+
 /* MKCOL that treats a collection which is already there as success, and
  * says whether the collection can now be written into.  A recursive
  * upload into an existing tree is the ordinary case, and a 405 for every
@@ -1553,7 +1574,12 @@ static void rget_tree(const char *uri_src, const char *local, int depth)
 
     out_start_uri(_("Listing collection"), uri_src);
     ret = fetch_resource_list(session.sess, uri_src, 1, 0, &list);
-    if (!out_handle(ret)) return;
+    if (!out_handle(ret)) {
+        /* A multistatus that failed part way through still leaves the
+         * responses it did parse. */
+        free_resource_list(list);
+        return;
+    }
 
     for (res = list; res != NULL && !cad_transfer_interrupted();
          res = res->next) {
@@ -1571,7 +1597,11 @@ static void rget_tree(const char *uri_src, const char *local, int depth)
             while (end > name && end[-1] == '/') *--end = '\0';
         }
 
-        if (*name == '\0') {
+        if (!safe_local_name(name)) {
+            out_start_uri(_("Downloading"), res->uri);
+            out_fail(_("the server named this member `%s', which is not a "
+                       "name cadaver will write in a local directory.\n"),
+                     name);
             ne_free(name);
             continue;
         }
@@ -1696,15 +1726,19 @@ static void multi_rmcol(int argc, const char *argv[])
 static void multi_less(int argc, const char *argv[])
 {
     int n;
-    for (n = 0; n < argc && !cad_transfer_interrupted(); n++)
+    for (n = 0; n < argc; n++) {
         execute_less(argv[n]);
+        if (cad_transfer_interrupted()) break;
+    }
 }
 
 static void multi_cat(int argc, const char *argv[])
 {
     int n;
-    for (n = 0; n < argc && !cad_transfer_interrupted(); n++)
+    for (n = 0; n < argc; n++) {
         execute_cat(argv[n]);
+        if (cad_transfer_interrupted()) break;
+    }
 }
 
 /* `mput' and `mget' stop at a Ctrl-C rather than carrying on to the

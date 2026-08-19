@@ -85,6 +85,11 @@ NORANGE_PREFIX=norange
 # transfer to last long enough to measure.
 SLOW_PREFIX=slow
 
+# And one whose PROPFIND names a member outside the collection, so that
+# what `rget' does with a name the server chose can be checked.  No real
+# server produces one.
+ESCAPE_PREFIX=escape
+
 # Each prefix above is matched against the collection a session runs in,
 # which tests/session.sh names after the session.  So a prefix has to
 # cover the name of every session that wants that subtree and no other
@@ -125,12 +130,13 @@ check_prefix() {
 check_prefix "authenticated" "$AUTH_PREFIX" netrc netrclogin
 check_prefix "Range-ignoring" "$NORANGE_PREFIX" norange
 check_prefix "paced" "$SLOW_PREFIX" slow
+check_prefix "member-naming" "$ESCAPE_PREFIX" escape
 
 echo "-- Launching x/net/webdav on port $PORT --"
 "$SERVER" -addr "127.0.0.1:$PORT" -dir "$ABSROOT" \
     -authprefix "$AUTH_PREFIX" -authuser "$AUTH_USER" \
     -authpass "$AUTH_PASS" -norangeprefix "$NORANGE_PREFIX" \
-    -slowprefix "$SLOW_PREFIX" \
+    -slowprefix "$SLOW_PREFIX" -escapeprefix "$ESCAPE_PREFIX" \
     > "$OUT/server.log" 2>&1 &
 SERVER_PID=$!
 

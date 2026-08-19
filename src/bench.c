@@ -84,23 +84,30 @@ static char *human_bytes(ne_off_t bytes, char *buf, size_t buflen)
 }
 
 /* A size with an optional K, M or G suffix, all powers of 1024.  Returns
- * -1 if `arg' is not one. */
+ * -1 if `arg' is not one.
+ *
+ * Every step is bounded before it is taken.  Multiplying first and
+ * checking afterwards overflows a signed 64-bit value on an argument a
+ * user can type -- `bench 9000000000G' -- and signed overflow is
+ * undefined, not a large number. */
 static ne_off_t parse_size(const char *arg)
 {
-    ne_off_t value = 0;
+    ne_off_t value = 0, multiplier = 1;
     const char *p = arg;
 
     if (*p < '0' || *p > '9') return -1;
 
     for (; *p >= '0' && *p <= '9'; p++) {
-        if (value > BENCH_MAX_SIZE) return -1;
-        value = value * 10 + (*p - '0');
+        int digit = *p - '0';
+
+        if (value > (BENCH_MAX_SIZE - digit) / 10) return -1;
+        value = value * 10 + digit;
     }
 
     switch (*p) {
-    case 'k': case 'K': value *= 1024; p++; break;
-    case 'm': case 'M': value *= 1024 * 1024; p++; break;
-    case 'g': case 'G': value *= 1024 * 1024 * 1024; p++; break;
+    case 'k': case 'K': multiplier = 1024; p++; break;
+    case 'm': case 'M': multiplier = 1024 * 1024; p++; break;
+    case 'g': case 'G': multiplier = 1024 * 1024 * 1024; p++; break;
     default: break;
     }
 
@@ -109,7 +116,28 @@ static ne_off_t parse_size(const char *arg)
      * meant something else would be a trap. */
     if (strcasecmp(p, "b") == 0 || strcasecmp(p, "ib") == 0) p += strlen(p);
 
-    if (*p != '\0' || value <= 0 || value > BENCH_MAX_SIZE) return -1;
+    if (*p != '\0' || value <= 0) return -1;
+    if (value > BENCH_MAX_SIZE / multiplier) return -1;
+
+    return value * multiplier;
+}
+
+/* A count between 1 and 1000, or -1.  Not atoi(): that reads "3x" as 3
+ * and everything that is not a number as 0, and a size argument beside
+ * it is already strict. */
+static int parse_count(const char *arg)
+{
+    int value = 0;
+    const char *p = arg;
+
+    if (*p < '0' || *p > '9') return -1;
+
+    for (; *p >= '0' && *p <= '9'; p++) {
+        value = value * 10 + (*p - '0');
+        if (value > 1000) return -1;
+    }
+
+    if (*p != '\0' || value < 1) return -1;
 
     return value;
 }
@@ -189,14 +217,10 @@ void execute_bench(const char *arg_size, const char *arg_count)
         goto done;
     }
 
-    if (arg_count) {
-        count = atoi(arg_count);
-        if (count < 1 || count > 1000) {
-            out_start_uri(_("Benchmarking"), uri_coll);
-            out_fail(_("`%s' is not a count between 1 and 1000.\n"),
-                     arg_count);
-            goto done;
-        }
+    if (arg_count && (count = parse_count(arg_count)) < 0) {
+        out_start_uri(_("Benchmarking"), uri_coll);
+        out_fail(_("`%s' is not a count between 1 and 1000.\n"), arg_count);
+        goto done;
     }
 
     /* Deleting the payload afterwards is part of this, so it must not
@@ -215,7 +239,13 @@ void execute_bench(const char *arg_size, const char *arg_count)
         goto done;
     }
 
-    payload = ne_malloc((size_t)size);
+    payload = malloc((size_t)size);
+    if (payload == NULL) {
+        out_fail(_("could not allocate a payload of %" NE_FMT_NE_OFF_T
+                   " bytes.\n"), size);
+        goto done;
+    }
+
     fill_payload(payload, (size_t)size);
     samples = ne_malloc((size_t)count * sizeof *samples);
 
@@ -240,6 +270,9 @@ void execute_bench(const char *arg_size, const char *arg_count)
         if (cad_transfer_interrupted()) goto failed;
     }
 
+    /* The upper middle for an even number of samples, which is what
+     * three or a handful of round trips is; there is no averaging here,
+     * because every figure reported is one the clock produced. */
     qsort(samples, (size_t)count, sizeof *samples, compare_doubles);
     result.latency_samples = count;
     result.latency_min = samples[0];
@@ -309,7 +342,7 @@ failed:
     (void) ne_delete(session.sess, uri_res);
 
 done:
-    if (payload) ne_free(payload);
+    if (payload) free(payload);
     if (samples) ne_free(samples);
     ne_free(uri_res);
     ne_free(uri_coll);

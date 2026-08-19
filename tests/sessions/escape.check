@@ -1,0 +1,15 @@
+# rget was told about a member called ../../escaped.txt.  It must not
+# have written one, here or anywhere above the directory it was given.
+for stray in "$WORK/escaped.txt" "$WORK/../escaped.txt" \
+             "$WORK/../../escaped.txt" "$WORK/back/../escaped.txt"; do
+    if [ -e "$stray" ]; then
+        echo "escape.check: rget wrote $stray" >&2
+        exit 1
+    fi
+done
+
+# And it must have written the one member that was a name.
+if [ ! -f "$WORK/back/hello.txt" ]; then
+    echo "escape.check: rget did not write the member that was usable" >&2
+    exit 1
+fi

@@ -58,6 +58,27 @@ struct restype_entry {
 static struct restype_entry *restype_cache;
 static int restype_count;
 
+/* Whether two URI paths name the same resource for the purpose of
+ * remembering what one is: the same bytes, give or take one trailing
+ * slash.
+ *
+ * Not ne_path_compare(), which ignores case as well.  That is right
+ * where it is used, matching a server's echo of an href against what
+ * was asked for, and wrong as a key here: /Foo and /foo are two
+ * resources on a case-sensitive server, and answering about one when
+ * asked about the other is worse than not answering at all.  The
+ * trailing slash has to be tolerated, because a collection is cached
+ * from a listing with one and asked about without. */
+static int same_path(const char *a, const char *b)
+{
+    size_t la = strlen(a), lb = strlen(b);
+
+    while (la > 1 && a[la - 1] == '/') la--;
+    while (lb > 1 && b[lb - 1] == '/') lb--;
+
+    return la == lb && strncmp(a, b, la) == 0;
+}
+
 void restype_remember(const char *uri_path, enum resource_type type)
 {
     struct restype_entry *entry;
@@ -66,7 +87,7 @@ void restype_remember(const char *uri_path, enum resource_type type)
     if (restype_count >= RESTYPE_CACHE_MAX) return;
 
     for (entry = restype_cache; entry; entry = entry->next) {
-        if (ne_path_compare(entry->uri, uri_path) == 0) {
+        if (same_path(entry->uri, uri_path)) {
             entry->type = type;
             return;
         }
@@ -107,7 +128,7 @@ static void restype_forget_under(const char *uri_path)
     }
 
     while ((entry = *link) != NULL) {
-        int under = ne_path_compare(entry->uri, uri_path) == 0
+        int under = same_path(entry->uri, uri_path)
             || (strncmp(entry->uri, uri_path, len) == 0
                 && (uri_path[len - 1] == '/' || entry->uri[len] == '/'));
 
@@ -165,7 +186,7 @@ static int restype_lookup(const char *uri_path)
     const struct restype_entry *entry;
 
     for (entry = restype_cache; entry; entry = entry->next)
-        if (ne_path_compare(entry->uri, uri_path) == 0)
+        if (same_path(entry->uri, uri_path))
             return (int)entry->type;
 
     return -1;

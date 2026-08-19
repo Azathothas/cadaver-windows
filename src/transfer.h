@@ -60,8 +60,15 @@ int cad_put_buffer(const char *uri_path, const char *buffer, size_t length);
  * Also for `bench': the point is how fast the bytes arrive. */
 int cad_get_discard(const char *uri_path, ne_off_t *bytes);
 
-/* Whether the last transfer stopped because of Ctrl-C rather than
- * because of the server.  Cleared when the next one starts. */
+/* Whether a transfer in this command stopped because of Ctrl-C and
+ * not because of the server.  A command that performs several
+ * transfers reads it to decide whether to go on to the next.
+ *
+ * cad_transfer_forget() clears it, and src/cadaver.c calls that at
+ * the start of every command: the flag has to outlive the transfer
+ * that set it, so something has to clear it, and the command that
+ * was interrupted is the last one it means anything to. */
 int cad_transfer_interrupted(void);
+void cad_transfer_forget(void);
 
 #endif /* CAD_TRANSFER_H */

@@ -1,0 +1,13 @@
+# What `rget' does with a member name the server chose.  This collection
+# is under the Go server's -escapeprefix, so every PROPFIND in it names
+# two members that are not names at all: one that unescapes to a path
+# leaving the collection, and one with a Windows separator in it.
+#
+# rget is the only command that writes a local file under a name the
+# server picked rather than one the user typed.  Without a check on
+# those names it wrote outside the directory it was given.
+lcd @WORK@
+put hello.txt
+ls
+rget . back
+quit

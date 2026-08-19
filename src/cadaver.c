@@ -73,6 +73,7 @@
 #include "cmdline.h"
 #include "commands.h"
 #include "options.h"
+#include "transfer.h"
 #include "utils.h"
 
 #define DEFAULT_NAMESPACE "http://webdav.org/cadaver/custom-properties/"
@@ -771,6 +772,10 @@ static int execute_command(const char *line)
      * a wildcard prints as it goes and that output belongs to the
      * command which caused it. */
     cmd_begin(line);
+    /* A Ctrl-C in the command before this one is not this one's.
+     * `cat a b' and `less a b' read the flag before their first
+     * transfer, so a stale one made them do nothing at all. */
+    cad_transfer_forget();
 
     tokens = parse_command(line, &argcount);
     if (argcount == 0) {

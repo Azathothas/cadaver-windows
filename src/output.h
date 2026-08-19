@@ -250,6 +250,8 @@ struct bench_result {
     int iterations;
     ne_off_t payload_bytes;
     int latency_samples;
+    /* The median is the upper middle for an even number of
+     * samples: every figure here is one the clock produced. */
     double latency_min, latency_median, latency_max;   /* seconds */
     ne_off_t upload_bytes, download_bytes;
     double upload_seconds, download_seconds;

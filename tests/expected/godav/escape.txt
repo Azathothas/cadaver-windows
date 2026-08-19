@@ -1,0 +1,13 @@
+Uploading hello.txt to `/escape/hello.txt': [28 bytes] succeeded.
+Listing collection `/escape/': succeeded.
+        ../../escaped.txt                      5  <DATE>
+        hello.txt                             28  <DATE>
+        sub\dir\out.txt                        5  <DATE>
+Listing collection `/escape/': succeeded.
+Downloading `/escape/../../escaped.txt': failed:
+the server named this member `../../escaped.txt', which is not a name cadaver will write in a local directory.
+Downloading `hello.txt' to `back/hello.txt': [28 bytes] succeeded.
+Downloading `/escape/sub\dir\out.txt': failed:
+the server named this member `sub\dir\out.txt', which is not a name cadaver will write in a local directory.
+Connection to `127.0.0.1' closed.
+-- cadaver exited 1 --
