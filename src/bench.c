@@ -131,6 +131,19 @@ static void fill_payload(char *buf, size_t length)
     }
 }
 
+/* The rate, or "-" where the duration is under the millisecond the
+ * report can express: a rate worked out from a duration that reads as
+ * 0.000 seconds is one the line beside it cannot support.  Reach for a
+ * larger payload rather than a smaller unit. */
+static const char *rate_str(ne_off_t bytes, double seconds,
+                            char *buf, size_t buflen)
+{
+    if (seconds < 0.0005) return "-";
+
+    ne_snprintf(buf, buflen, "%.2f", (double)bytes / ONE_MIB / seconds);
+    return buf;
+}
+
 static int compare_doubles(const void *a, const void *b)
 {
     double x = *(const double *)a, y = *(const double *)b;
@@ -160,7 +173,7 @@ void execute_bench(const char *arg_size, const char *arg_count)
     struct bench_result result;
     char *uri_coll, *uri_res, *payload = NULL;
     double *samples = NULL;
-    char started[40], num[64], num2[64];
+    char started[40], num[64], num2[64], rate1[32], rate2[32];
     ne_off_t size = BENCH_DEFAULT_SIZE;
     int count = BENCH_DEFAULT_COUNT, n, ret = NE_OK;
     int in_the_way;
@@ -268,27 +281,24 @@ void execute_bench(const char *arg_size, const char *arg_count)
     res_benchmark(&result);
 
     out_printf(_("  started    %s\n"), started[0] ? started : _("unknown"));
-    out_printf(_("  payload    %s, %d iterations\n"),
-               human_bytes(size, num, sizeof num), count);
+    out_printf(_("  payload    %s, %d iteration%s\n"),
+               human_bytes(size, num, sizeof num), count,
+               count == 1 ? "" : "s");
     out_printf(_("  %-9s  min %.3f ms, median %.3f ms, max %.3f ms over "
                  "%d samples\n"),
                result.latency_op, result.latency_min * 1000.0,
                result.latency_median * 1000.0, result.latency_max * 1000.0,
                count);
-    out_printf(_("  upload     %s in %.3f s wall clock, %.2f MiB/s\n"),
+    out_printf(_("  upload     %s in %.3f s wall clock, %s MiB/s\n"),
                human_bytes(result.upload_bytes, num, sizeof num),
                result.upload_seconds,
-               result.upload_seconds > 0.0
-                   ? (double)result.upload_bytes / ONE_MIB
-                         / result.upload_seconds
-                   : 0.0);
-    out_printf(_("  download   %s in %.3f s wall clock, %.2f MiB/s\n"),
+               rate_str(result.upload_bytes, result.upload_seconds,
+                        rate1, sizeof rate1));
+    out_printf(_("  download   %s in %.3f s wall clock, %s MiB/s\n"),
                human_bytes(result.download_bytes, num2, sizeof num2),
                result.download_seconds,
-               result.download_seconds > 0.0
-                   ? (double)result.download_bytes / ONE_MIB
-                         / result.download_seconds
-                   : 0.0);
+               rate_str(result.download_bytes, result.download_seconds,
+                        rate2, sizeof rate2));
     goto done;
 
 failed:

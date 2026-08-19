@@ -779,13 +779,22 @@ static void detail_seconds(ne_buffer *b, const char *key, double seconds)
     ne_buffer_zappend(b, num);
 }
 
+/* The rate, or null where the duration beside it is 0.000 seconds.
+ * A transfer that took less than the reported resolution gives a rate
+ * that does not follow from the two numbers next to it, and a document
+ * that carries one is worse than one that says the measurement could
+ * not be made. */
 static void detail_rate(ne_buffer *b, ne_off_t bytes, double seconds)
 {
     char num[64];
-    double rate = seconds > 0.0
-        ? (double)bytes / (1024.0 * 1024.0) / seconds : 0.0;
 
-    ne_snprintf(num, sizeof num, ",\"mib_per_second\":%.2f", rate);
+    if (seconds < 0.0005) {
+        ne_buffer_czappend(b, ",\"mib_per_second\":null");
+        return;
+    }
+
+    ne_snprintf(num, sizeof num, ",\"mib_per_second\":%.2f",
+                (double)bytes / (1024.0 * 1024.0) / seconds);
     ne_buffer_zappend(b, num);
 }
 

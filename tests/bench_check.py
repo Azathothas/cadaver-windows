@@ -85,9 +85,21 @@ def main():
         want(part["bytes"] == payload * iterations,
              "%s bytes is %r, wanted %d"
              % (way, part["bytes"], payload * iterations))
-        want(0.0 < part["seconds"] < MAX_SECONDS,
+        want(0.0 <= part["seconds"] < MAX_SECONDS,
              "%s seconds is %r" % (way, part["seconds"]))
-        want(part["mib_per_second"] > 0.0,
+
+        if part["seconds"] < 0.0005:
+            # Faster than the duration beside it can express, so there
+            # is no rate the two numbers would support.  A test runner
+            # with a fast disk reaches this; the payload is the thing to
+            # change, not the unit.
+            want(part["mib_per_second"] is None,
+                 "%s took under a millisecond but reports a rate of %r"
+                 % (way, part["mib_per_second"]))
+            continue
+
+        want(part["mib_per_second"] is not None
+             and part["mib_per_second"] > 0.0,
              "%s mib_per_second is %r" % (way, part["mib_per_second"]))
 
         # The rate has to follow from the byte count and the duration.
@@ -96,8 +108,8 @@ def main():
         # the real duration is anywhere within half a millisecond of
         # what the document says, and the rate is rounded to two
         # decimals on top of that.  A transfer over the loopback
-        # interface takes about ten milliseconds, where half of one is
-        # five per cent, so the window has to be derived rather than
+        # interface takes a few milliseconds, where half of one is
+        # several per cent, so the window has to be derived rather than
         # guessed at.
         mib = part["bytes"] / (1024.0 * 1024.0)
         low = mib / (part["seconds"] + 0.0005) - 0.005

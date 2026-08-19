@@ -75,7 +75,7 @@ SUBSTITUTIONS = [
     # counts and the iteration count are not measurements and stay.
     (re.compile(r"min [0-9.]+ ms, median [0-9.]+ ms, max [0-9.]+ ms"),
      "min <MS> ms, median <MS> ms, max <MS> ms"),
-    (re.compile(r"in [0-9.]+ s wall clock, [0-9.]+ MiB/s"),
+    (re.compile(r"in [0-9.]+ s wall clock, (?:[0-9.]+|-) MiB/s"),
      "in <SECONDS> s wall clock, <RATE> MiB/s"),
     (HTTP_DATE, "<DATE>"),
     (DATE, "<DATE>"),

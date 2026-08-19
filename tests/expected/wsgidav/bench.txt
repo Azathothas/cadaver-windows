@@ -21,7 +21,7 @@
     {
       "command": "bench",
       "args": [
-        "64K",
+        "1M",
         "2"
       ],
       "target": "/bench/cadaver-bench.dat",
@@ -31,7 +31,7 @@
         "target": "/bench/",
         "started": "<DATE>",
         "iterations": 2,
-        "payload_bytes": 65536,
+        "payload_bytes": 1048576,
         "latency": {
           "op": "PROPFIND",
           "samples": 2,
@@ -40,12 +40,12 @@
           "max_ms": "<MS>"
         },
         "upload": {
-          "bytes": 131072,
+          "bytes": 2097152,
           "seconds": "<SECONDS>",
           "mib_per_second": "<RATE>"
         },
         "download": {
-          "bytes": 131072,
+          "bytes": 2097152,
           "seconds": "<SECONDS>",
           "mib_per_second": "<RATE>"
         }
@@ -53,10 +53,10 @@
       "output": [
         "Benchmarking `/bench/': succeeded.",
         "  started    <DATE>",
-        "  payload    65536 bytes (64.0 KiB), 2 iterations",
+        "  payload    1048576 bytes (1.0 MiB), 2 iterations",
         "  PROPFIND   min <MS> ms, median <MS> ms, max <MS> ms over 2 samples",
-        "  upload     131072 bytes (128.0 KiB) in <SECONDS> s wall clock, <RATE> MiB/s",
-        "  download   131072 bytes (128.0 KiB) in <SECONDS> s wall clock, <RATE> MiB/s"
+        "  upload     2097152 bytes (2.0 MiB) in <SECONDS> s wall clock, <RATE> MiB/s",
+        "  download   2097152 bytes (2.0 MiB) in <SECONDS> s wall clock, <RATE> MiB/s"
       ]
     },
     {
