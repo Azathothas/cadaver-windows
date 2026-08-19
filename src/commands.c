@@ -948,6 +948,14 @@ static void execute_less(const char *native)
     }
 
     uri_path = uri_resolve_native(native);
+
+    /* The operation is opened before the request rather than after it.
+     * Opened afterwards, op_begin() had already forgotten which request
+     * was made, so the record carried no method and no status -- and a
+     * pager that exited badly, or a GET that failed, recorded no
+     * operation at all. */
+    out_start_raw("%s", "");
+
     child_running = true;
     ret = ne_get(session.sess, uri_path, fileno(p));
     if (ret) {
@@ -955,11 +963,13 @@ static void execute_less(const char *native)
         out_result(ret);
     }
     else if ((ret = cad_pclose(p)) != 0) {
+        /* The GET worked; what the pager did with it is a warning. */
+        out_done();
         out_printf(_("Warning: Abnormal exit from pager (%d).\n"), ret);
     }
     else {
         /* The pager consumed it; nothing else says the GET worked. */
-        out_start(_("Displaying"), native);
+        out_printf(_("Displaying `%s':"), native);
         out_success();
     }
     child_running = false;
@@ -981,6 +991,14 @@ static void execute_cat(const char *native_path)
 
     uri_path = uri_resolve_native(native_path);
 
+    /* An operation that announces itself only when it fails: what `cat'
+     * has to say is the resource.  It is opened before the request all
+     * the same, so that a successful `cat' counts as an operation the
+     * way every other command does -- it used to record nothing, so
+     * `cat a b' with one failure looked like a command that performed
+     * one operation. */
+    out_start_raw("%s", "");
+
     /* ne_get() writes to the descriptor rather than through stdio, so
      * anything buffered has to go out first or it would appear after
      * the resource.  The descriptor is put into binary mode for the
@@ -995,8 +1013,11 @@ static void execute_cat(const char *native_path)
     cad_set_mode(STDOUT_FILENO, mode);
 
     if (ret != NE_OK) {
-        out_start(_("Fetching"), native_path);
+        out_printf(_("Fetching `%s':"), native_path);
         out_result(ret);
+    }
+    else {
+        out_done();
     }
     ne_free(uri_path);
 }
@@ -1105,17 +1126,49 @@ static void do_copymove(int argc, const char *argv[],
     ne_free(uri_dest);
 }
 
-static void simple_move(const char *src, const char *dest) 
+/* Reports the outcome of a COPY or MOVE.  A 412 back from a request
+ * that sent `Overwrite: F' means the destination is already there, and
+ * the bare status names neither the resource in the way nor the way to
+ * replace it.  `advice' is the second half of that sentence, or NULL
+ * where the request asked to overwrite and a 412 means something
+ * else. */
+static void copymove_result(int ret, const char *uri_dest, const char *advice)
 {
-    out_start_2uri(_("Moving"), src, dest);
-    out_result(ne_move(session.sess, get_bool_option(opt_overwrite), src, dest));
+    int status = req_last_status();
+
+    out_result(ret);
+
+    if (ret != NE_OK && advice && status == 412) {
+        char *native = native_path_from_uri(uri_dest);
+        out_printf(_("`%s' already exists. %s\n"), native, advice);
+        ne_free(native);
+    }
 }
 
-static void simple_copy(const char *src, const char *dest) 
+static const char *overwrite_advice(void)
 {
+    return get_bool_option(opt_overwrite)
+        ? NULL : _("`set overwrite on' replaces it.");
+}
+
+static void simple_move(const char *src, const char *dest)
+{
+    const char *advice = overwrite_advice();
+
+    out_start_2uri(_("Moving"), src, dest);
+    copymove_result(ne_move(session.sess, get_bool_option(opt_overwrite),
+                            src, dest),
+                    dest, advice);
+}
+
+static void simple_copy(const char *src, const char *dest)
+{
+    const char *advice = overwrite_advice();
+
     out_start_2uri(_("Copying"), src, dest);
-    out_result(ne_copy(session.sess, get_bool_option(opt_overwrite), 
-		       NE_DEPTH_INFINITE, src, dest));
+    copymove_result(ne_copy(session.sess, get_bool_option(opt_overwrite),
+                            NE_DEPTH_INFINITE, src, dest),
+                    dest, advice);
 }
 
 static void execute_rename(const char *native_src, const char *native_dest)
@@ -1130,7 +1183,13 @@ static void execute_rename(const char *native_src, const char *native_dest)
         out_fail(_("the source path is not a collection.\n"));
     }
     else {
-        out_result(ne_move(session.sess, 0, uri_src, uri_dest));
+        /* `rename' always sends Overwrite: F, whatever the option says,
+         * so a 412 always means the destination exists -- and `set
+         * overwrite on' would not change that. */
+        copymove_result(ne_move(session.sess, 0, uri_src, uri_dest),
+                        uri_dest,
+                        _("`rename' never overwrites; `move' with "
+                          "`set overwrite on' does."));
     }
 
     ne_free(uri_src);

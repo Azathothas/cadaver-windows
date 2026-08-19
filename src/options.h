@@ -71,6 +71,10 @@ extern int lockdepth; /* current lock depth setting. */
 extern int searchdepth; /* current search depth setting. */
 extern enum ne_lock_scope lockscope; /* current lock scope setting. */
 
+/* Completes an option name for readline.  See the definition for the
+ * generator convention. */
+char *option_generator(const char *text, int state);
+
 void execute_set( const char *opt, const char * );
 void execute_unset( const char *opt, const char * );
 /* Describe option of given name */

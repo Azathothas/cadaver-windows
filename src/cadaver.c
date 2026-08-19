@@ -1039,7 +1039,7 @@ static char **completion(const char *text, int start, int end)
                                             rl_filename_completion_function);
             break;
         case parmscope_option:
-            /* TODO */
+            matches = rl_completion_matches(text, option_generator);
             break;
         case parmscope_remote:
             if (session.connected) {
@@ -1223,8 +1223,8 @@ int main(int argc, char *argv[])
 	char *cmd;
 	cmd = read_command();
 	if (cmd == NULL) {
-	    /* Is it safe to do this... they just closed stdin, so
-	     * is it bad to write to stdout? */
+	    /* End of input.  The newline closes the line the prompt
+	     * left open, so that a transcript does not end mid-line. */
 	    out_putchar('\n');
 	    ret = 1;
 	} else {

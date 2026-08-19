@@ -1,0 +1,19 @@
+Creating `over': succeeded.
+Uploading hello.txt to `/overwrite/over/hello.txt': [.. succeeded.
+Uploading second.txt to `/overwrite/over/second.txt': [.. succeeded.
+Copying `/overwrite/over/hello.txt' to `/overwrite/over/second.txt': failed:
+412 Precondition Failed
+`/overwrite/over/second.txt' already exists. `set overwrite on' replaces it.
+Moving `/overwrite/over/hello.txt' to `/overwrite/over/second.txt': failed:
+412 Precondition Failed
+`/overwrite/over/second.txt' already exists. `set overwrite on' replaces it.
+Copying `/overwrite/over/hello.txt' to `/overwrite/over/second.txt': succeeded.
+Renaming `/overwrite/over/hello.txt' to `/overwrite/over/second.txt': failed:
+412 Precondition Failed
+`/overwrite/over/second.txt' already exists. `rename' never overwrites; `move' with `set overwrite on' does.
+Listing collection `/overwrite/over/': succeeded.
+        hello.txt                             28  <DATE>
+        second.txt                            28  <DATE>
+Deleting collection `/overwrite/over/': succeeded.
+Connection to `127.0.0.1' closed.
+-- cadaver exited 3 --

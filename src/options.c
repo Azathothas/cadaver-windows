@@ -34,6 +34,7 @@
 #include <ne_request.h>
 #include <ne_utils.h>
 #include <ne_alloc.h>
+#include <ne_string.h> /* ne_strncasecmp */
 #include <ne_basic.h> /* NE_DEPTH_* */
 
 #include "common.h"
@@ -363,11 +364,21 @@ static void set_searchdepth(const char *set)
     if (strcmp(set, "0") == 0 ||
 	strcasecmp(set, "zero") == 0)
 	searchdepth = NE_DEPTH_ZERO;
-    else if (strcasecmp(set, "1") == 0 ||
+    else if (strcmp(set, "1") == 0 ||
 	     strcasecmp(set, "one") == 0)
 	searchdepth = NE_DEPTH_ONE;
-    else
+    else if (strcasecmp(set, "infinite") == 0 ||
+	     strcasecmp(set, "infinity") == 0)
 	searchdepth = NE_DEPTH_INFINITE;
+    else {
+	/* Anything unrecognised used to become infinity, so a typo set
+	 * the widest possible search and said nothing.  Every other
+	 * option with a fixed set of values reports one it does not
+	 * know. */
+	out_printf(_("Invalid value for searchdepth. Try `set searchdepth' "
+		     "for more info.\n"));
+	cmd_failed(_("invalid value"));
+    }
 }
 
 static void unset_searchdepth(const char *s)
@@ -379,6 +390,54 @@ static void disp_searchdepth(char *buf, size_t len)
 {
     ne_strnzcpy(buf, searchdepth == NE_DEPTH_ZERO ? "0" :
                      searchdepth == NE_DEPTH_ONE ? "1" : "infinity", len);
+}
+
+/* readline's generator convention: `state' is zero on the first call
+ * for a given prefix and non-zero on the ones after it, and each call
+ * returns the next match or NULL when there are none left.  The command
+ * table says which arguments are option names -- `set', `unset' and
+ * `describe' -- and this is what turns that into completions. */
+char *option_generator(const char *text, int state)
+{
+    static int n;
+    static size_t len;
+    const char *name;
+
+    if (!state) {
+        n = 0;
+        len = strlen(text);
+    }
+
+    while ((name = options[n].name) != NULL) {
+        n++;
+        if (ne_strncasecmp(name, text, len) == 0)
+            return ne_strdup(name);
+    }
+
+    return NULL;
+}
+
+/* A truth word, or -1 if it is not one.  `set' used to refuse a value
+ * for a boolean outright, so `set quiet off' failed and the only way to
+ * turn one off was `unset quiet' -- although `set' with no argument
+ * displays every boolean as on or off, so what it printed could not be
+ * typed back in. */
+static int parse_bool(const char *value)
+{
+    static const struct { const char *word; int truth; } words[] = {
+        { "on", 1 }, { "off", 0 },
+        { "yes", 1 }, { "no", 0 },
+        { "true", 1 }, { "false", 0 },
+        { "1", 1 }, { "0", 0 },
+        { NULL, 0 }
+    };
+    int n;
+
+    for (n = 0; words[n].word != NULL; n++)
+        if (strcasecmp(value, words[n].word) == 0)
+            return words[n].truth;
+
+    return -1;
 }
 
 static const struct option *find_option(const char *name)
@@ -403,8 +462,15 @@ void execute_set(const char *opt, const char *newv)
 		switch (options[n].type) {
 		case opt_bool:
 		    if (newv) {
-			out_printf("%s is a boolean option.\n", opt);
-                        cmd_failed(_("that option takes no value"));
+			int truth = parse_bool(newv);
+
+			if (truth < 0) {
+			    out_printf(_("%s is a boolean option: give it on "
+					 "or off, or no value at all.\n"), opt);
+			    cmd_failed(_("that option takes on or off"));
+			} else {
+			    *(int *)options[n].holder = truth;
+			}
 		    } else {
 			*(int *)options[n].holder = 1;
 		    }
@@ -447,21 +513,23 @@ void execute_unset(const char *opt, const char *newv)
 	    switch (options[n].type) {
 	    case opt_bool:
 		if (newv != NULL) {
-		    out_printf("%s ia a boolean option.\n", opt);
+		    out_printf(_("%s is a boolean option: `unset %s' takes no "
+				 "value.\n"), opt, opt);
+		    cmd_failed(_("that option takes no value"));
 		} else {
 		    *(int *)options[n].holder = 0;
 		}
 		break;
 	    case opt_string:
-		/* FIXME: This is bad UI */
 		if (newv != NULL) {
-		    out_printf("%s cannot take a value to unset.\n", opt);
+		    out_printf(_("%s cannot take a value to unset.\n"), opt);
+		    cmd_failed(_("that option takes no value"));
 		} else {
 		    char *v = options[n].holder;
 		    free(v);
 		    options[n].holder = NULL;
 		}
-		break;	       
+		break;
 	    case opt_handled:
 		(*options[n].unset)(newv);
 		break;
@@ -469,7 +537,10 @@ void execute_unset(const char *opt, const char *newv)
 	    return;
 	}
     }
-    out_printf("Unknown option: %s.\n", opt);
+    /* `set' on an option that does not exist reports a failure, and
+     * this used to print the same message and succeed. */
+    out_printf(_("Unknown option: %s.\n"), opt);
+    cmd_failed(_("no such option"));
 }
 
 void execute_describe(const char *name)

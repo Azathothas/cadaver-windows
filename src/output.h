@@ -197,6 +197,12 @@ void out_fail(const char *fmt, ...)
 void req_started(const char *method, const char *target);
 void req_status(int status);
 
+/* The status of the last response received since the operation in
+ * progress began, or 0 if none arrived.  Valid until the operation is
+ * ended, which forgets it, so a caller that wants to say something
+ * about a particular status has to read it first. */
+int req_last_status(void);
+
 /* --- Structured detail --------------------------------------------
  *
  * The commands that produce data rather than just an outcome hand it

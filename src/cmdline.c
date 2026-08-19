@@ -85,16 +85,23 @@ static int has_glob_pattern(const char *str) {
  *   8: ignoring comment
  *   9: acceptance state
  * 
- * State diagram is left as an exercise to the reader, since 
+ * State diagram is left as an exercise to the reader, since
  * I'm not going to draw it in ASCII. ;)
  *
  * Returns the token, malloc()-allocated, or NULL on end-of-line.
  * Position updated to point after token.
+ *
+ * An empty token and the end of the line are different answers.  A
+ * zero-length token used to give NULL for both, which the caller reads
+ * as the end of the line, so `propset res name ""' set no value and
+ * dropped every argument after it without a word.  `started' records
+ * that a token was entered at all, which for a quoted empty string is
+ * the only evidence there is.
  */
 static char *gettoken(const char *line, const char **pointer)
 {
     const char *pnt;
-    int state = 0;
+    int state = 0, started = 0;
     char quote = 0; /* = 0 to keep gcc -Wall happy */
     /* Grown to fit rather than a fixed BUFSIZ array: a token that long
      * used to make this return NULL, which the caller reads as end of
@@ -116,15 +123,25 @@ static char *gettoken(const char *line, const char **pointer)
 	 case 0: /* leading whitespace chew */
 	     if (ISQUOTE(*pnt)) {
 		 state = 2;
+		 started = 1;
 		 quote = *pnt;
 	     } else if (*pnt == '#') {
 		 state = 8;
 	     } else if (!ISWHITE(*pnt)) {
 		 KEEP(*pnt);
 		 state = 1;
+		 started = 1;
 	     }
 	     break;
 	 case 1: /* normal chew */
+	     /* A quote is an ordinary character here.  It quotes only
+	      * where it opens a token, which is the same rule
+	      * lib/netrc.c uses for a .netrc value, and for the same
+	      * reason: on Windows a backslash is a path separator rather
+	      * than an escape, so a quote that was special everywhere
+	      * would leave no way at all to write `set lockowner
+	      * foo"bar'.  A file name cannot contain one there, and a
+	      * property value, a lock owner and a search term all can. */
 	     if (ISWHITE(*pnt)) {
 		 state = 9;
 	     } else if (*pnt == '#') {
@@ -153,7 +170,7 @@ static char *gettoken(const char *line, const char **pointer)
 	     KEEP(*pnt);
 	     state = 2;
 	     break;
-	 case 5: /* comment chew */
+	 case 8: /* comment chew: the rest of the line is not a token */
 	     break;
 	 }
 	 pnt++;
@@ -170,7 +187,7 @@ static char *gettoken(const char *line, const char **pointer)
      pos = buf->used - 1;
      token = ne_buffer_finish(buf);
      *pointer = pnt;
-     if (pos > 0) {
+     if (pos > 0 || started) {
 #ifdef I_AM_A_LUMBERJACK
 	 /* a little hack; does env. var expansion...
 	  * 1) is this really useful?

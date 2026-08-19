@@ -1,0 +1,21 @@
+# COPY, MOVE and `rename' onto a resource that is already there.  The
+# request carries Overwrite: F and the server answers 412, which on its
+# own names neither the resource in the way nor the option that would
+# replace it.
+lcd @WORK@
+mkcol over
+cd over
+put hello.txt
+put second.txt
+set overwrite off
+copy hello.txt second.txt
+move hello.txt second.txt
+set overwrite on
+copy hello.txt second.txt
+# `rename' sends Overwrite: F whatever the option says, so it reports
+# the destination even here.
+rename hello.txt second.txt
+ls
+cd ..
+rmcol over
+quit

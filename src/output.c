@@ -305,6 +305,11 @@ void req_status(int status)
     req_code = status;
 }
 
+int req_last_status(void)
+{
+    return req_made ? req_code : 0;
+}
+
 void run_begin(const char *target)
 {
     run_start_time = now_seconds();

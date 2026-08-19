@@ -219,6 +219,73 @@ out=`"$CADAVER" < /dev/null 2>&1 || :`
 check "end of input ends the session" "dav:!>" \
     "`echo \"$out\" | tr -d '\r\n' | sed 's/ *$//'`"
 
+echo "-- Options --"
+
+# `set' with no argument prints every boolean as on or off, and until
+# now that could not be typed back in: a boolean refused a value, so
+# `unset' was the only way to turn one off.
+out=`printf 'set overwrite off\nset\nquit\n' | "$CADAVER" 2>&1 || :`
+contains "a boolean takes off" "overwrite: off" "$out"
+out=`printf 'set overwrite off\nset overwrite on\nset\nquit\n' \
+    | "$CADAVER" 2>&1 || :`
+contains "a boolean takes on" "overwrite: on" "$out"
+out=`printf 'set overwrite perhaps\nquit\n' | "$CADAVER" 2>&1 || :`
+contains "a boolean refuses anything else" "give it on or off" "$out"
+status "and that is a failed command" 1 \
+    sh -c "printf 'set overwrite perhaps\nquit\n' | '$CADAVER'"
+
+# Every option with a fixed set of values reports one it does not know.
+# searchdepth used to take anything at all and treat it as infinity, so
+# a typo silently set the widest possible search.
+out=`printf 'set searchdepth 1\nset\nquit\n' | "$CADAVER" 2>&1 || :`
+contains "searchdepth accepts 1" "searchdepth: 1" "$out"
+out=`printf 'set searchdepth nonsense\nquit\n' | "$CADAVER" 2>&1 || :`
+contains "searchdepth refuses a value it does not know" \
+    "Invalid value for searchdepth" "$out"
+status "and that is a failed command" 1 \
+    sh -c "printf 'set searchdepth nonsense\nquit\n' | '$CADAVER'"
+
+# `set' on an option that does not exist reports a failure; `unset' used
+# to print the same message and succeed.
+status "unset on an unknown option fails" 1 \
+    sh -c "printf 'unset nosuchoption\nquit\n' | '$CADAVER'"
+
+echo "-- Quoting --"
+
+# `echo' writes each argument followed by a space, so the number of
+# arguments the tokeniser produced is visible in the spacing.  -r rather
+# than a pipe, because readline echoes the prompt and the command line
+# itself when the input is not a terminal.
+quoting() {
+    what=$1
+    expected=$2
+    line=$3
+
+    printf '%s\nquit\n' "$line" > "$TMP/quote.cad"
+    got=`"$CADAVER" -r "$TMP/quote.cad" < /dev/null 2>/dev/null | head -1 \
+        | tr -d '\r' || :`
+    check "$what" "$expected" "$got"
+}
+
+# An empty argument and the end of the line used to be the same answer
+# from gettoken(), and parse_command() reads the second as the end of
+# the command, so `propset res name ""' set nothing and dropped every
+# argument after it in silence.
+quoting "an empty argument is an argument" "a  b " 'echo a "" b'
+quoting "an empty argument alone is one argument" " " 'echo ""'
+
+# A quote quotes only where it opens a token; inside one it is an
+# ordinary character.  That is the rule lib/netrc.c uses for a .netrc
+# value, and it is what leaves a way to write a quote at all on Windows,
+# where a backslash is a path separator rather than an escape.
+quoting "a quote opening a token groups it" "a b " 'echo "a b"'
+quoting "a quote inside a token is a character" 'a"b"c ' 'echo a"b"c'
+quoting "an unterminated quote runs to the end of the line" "a b " 'echo "a b'
+
+# A hash still starts a comment, and still does not inside quotes.
+quoting "a hash starts a comment" "one " 'echo one # two'
+quoting "a hash inside quotes is a hash" "one # two " 'echo "one # two"'
+
 echo "-- Machine-readable output --"
 
 # One object on standard output and nothing else.  The prompt readline
@@ -261,13 +328,33 @@ fi
 
 echo "-- The source --"
 
-# src/output.c decides where output goes, which is what makes --json a
-# document rather than a document with a stray line in it.  Everything
-# else in src/ must go through it.
-stray=`grep -nE '(^|[^A-Za-z0-9_])(printf|putchar|puts)[[:space:]]*\(' \
+# src/output.c decides where output goes.  With --json standard output
+# carries the result document, so one write from anywhere else would
+# make it something no parser accepts.
+#
+# There are three ways to write there, and none of them is caught by the
+# checks for the other two: the printf family with no stream argument, a
+# stdio call naming stdout, and a write(2) to the descriptor.
+stray=`grep -nE '(^|[^A-Za-z0-9_])(printf|vprintf|putchar|puts)[[:space:]]*\(' \
     "$srcdir"/src/*.c | grep -v '^.*src/output\.c:' \
-    | grep -vE 'fprintf|snprintf|vfprintf|sprintf|fputs|out_printf|out_putchar|out_puts' || :`
-check "nothing in src/ writes to standard output directly" "" "$stray"
+    | grep -vE 'fprintf|snprintf|vfprintf|vsnprintf|sprintf|fputs|out_printf|out_vprintf|out_putchar|out_puts' || :`
+check "nothing in src/ calls the printf family directly" "" "$stray"
+
+# Anything naming stdout: fputs(x, stdout), fprintf(stdout, ...),
+# fwrite(x, 1, n, stdout), fileno(stdout).  Matching the call would miss
+# the ones written over two lines, so the name itself is what is
+# forbidden.  --trace is the one thing allowed to aim there, and --json
+# refuses to share standard output with it.
+stray=`grep -n '\bstdout\b' "$srcdir"/src/*.c \
+    | grep -v '^.*src/output\.c:' | grep -v 'trace' || :`
+check "nothing in src/ names stdout except the trace" "" "$stray"
+
+# And the descriptor underneath it.  `cat' hands STDOUT_FILENO to neon,
+# which is the resource itself and is refused under --json, so only a
+# write(2) is looked for here.
+stray=`grep -nE '(^|[^A-Za-z0-9_])write[[:space:]]*\([[:space:]]*(STDOUT_FILENO|1)[[:space:]]*,' \
+    "$srcdir"/src/*.c | grep -v '^.*src/output\.c:' || :`
+check "nothing in src/ writes to the standard output descriptor" "" "$stray"
 
 echo
 if [ $FAILURES -eq 0 ]; then
