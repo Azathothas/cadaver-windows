@@ -50,12 +50,12 @@ nothing to configure:
 which prints the fork version and the bundled neon build:
 
 ```
-cadaver 0.28-win1
-neon 0.37.1: Bundled build, Expat 2.8.1, LFS, OpenSSL 3.6.3 9 Jun 2026 (thread-safe).
+cadaver 0.28-win2
+neon 0.37.1: Bundled build, Expat 2.8.3, LFS, OpenSSL 3.6.3 9 Jun 2026 (thread-safe).
 readline 8.3
 ```
 
-Every request carries `User-Agent: cadaver/0.28-win1 neon/0.37.1`, so a
+Every request carries `User-Agent: cadaver/0.28-win2 neon/0.37.1`, so a
 server log identifies the tool, the fork release and the HTTP library
 behind it.
 

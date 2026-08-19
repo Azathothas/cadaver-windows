@@ -3,7 +3,9 @@
 cadaver \- command\-line WebDAV client
 .SH SYNOPSIS
 .B cadaver
-[\fB\-t\fR] [\fB\-r\fR \fIfile\fR] [\fB\-p\fR \fIhost\fR[:\fIport\fR]] [\fB\-V\fR] [\fB\-h\fR] \fIURL\fR
+[\fB\-t\fR] [\fB\-r\fR \fIfile\fR] [\fB\-p\fR \fIhost\fR[:\fIport\fR]]
+[\fB\-c\fR \fIwhat\fR] [\fB\-j\fR] [\fB\-T\fR[\fB=\fIfile\fR]] [\fB\-v\fR]
+[\fB\-V\fR] [\fB\-h\fR] \fIURL\fR
 .SH DESCRIPTION
 .B cadaver
 supports file upload, download, on-screen display, in-place editing,
@@ -53,10 +55,53 @@ Connect through the proxy server
 .I host
 on the optional
 .IR port .
+.IP "\-c, \-\-clobber=\fIwhat\fR"
+What
+.B get
+does when the local file already exists:
+.B ask
+for another name, which is the default,
+.B yes
+to overwrite it, or
+.B no
+to leave it and fail. Asking cannot work in a script, where the prompt
+reads end of input.
+.IP "\-j, \-\-json"
+Write one JSON object describing the session to standard output, and
+nothing else. Every command appears in it with its arguments, the
+request target, whether it worked, how long it took, the reason and the
+HTTP method and status when it did not, and everything it printed. The
+shape is documented in
+.I AGENTS.md
+in the distribution.
+.B cat ,
+.B less
+and
+.B edit
+are refused under
+.BR \-\-json ,
+because each writes a byte stream to standard output or runs a program
+that might.
+.IP "\-T, \-\-trace[=\fIfile\fR]"
+Dump every request and response to
+.IR file ,
+tagged with the command that issued it. Without a file the trace goes
+to standard error;
+.B \-
+means standard output, which
+.B \-\-json
+then refuses to share. Message bodies are included, except the body of
+a transfer, which is the resource itself.
+.IP "\-v, \-\-verbose"
+Widen the trace to everything neon reports, including socket, TLS, XML
+parser and authentication detail. It does not include the credentials
+in the clear;
+.B "set debug cleartext"
+is how to ask for those.
 .IP "\-V, \-\-version"
-Display version information and exit.
+Display version information and exit 0.
 .IP "\-h, \-\-help"
-Display the option list and the default rcfile path, and exit.
+Display the option list and the default rcfile path, and exit 0.
 .SH COMMAND REFERENCE
 .B help
 lists the commands and
@@ -238,6 +283,11 @@ Treat local names as UTF\-8 rather than converting them.
 Whether to print connection progress.
 .IP "keepalive"
 Use persistent connections.
+.IP "clobber"
+What
+.B get
+does when the local file already exists:
+.BR ask ", " yes " or " no .
 .IP "editor, pager"
 Programs to run for
 .B edit
@@ -257,7 +307,16 @@ Proxy configuration.
 .IP "searchall, searchdepth, searchorder, searchdorder"
 DASL search behaviour.
 .IP "debug"
-Protocol tracing, written to standard error. The value is a
+Protocol tracing.
+.B \-\-trace
+and
+.B \-\-verbose
+cover the same ground and tag it with the command that caused it, so
+reach for those first; this is for turning one keyword on part way
+through a session, and is the only way to ask for the credentials in
+the clear. It writes to wherever
+.B \-\-trace
+was pointed, or to standard error. The value is a
 comma-separated list of
 .BR http ", " httpbody ", " xml ", " xmlparse ", " socket ", " ssl ", "
 .BR httpauth ", " locks ", " files " and " cleartext .
@@ -290,11 +349,9 @@ token are associated with this entry.
 .RS
 Equivalent to the
 .B machine
-token but matching any hostname. Only one
-.B default
-token may be used and it must come after all
+token but matching any hostname. It is used only when no
 .B machine
-tokens.
+entry matches, wherever in the file it appears.
 .RE
 
 .B login
@@ -314,16 +371,35 @@ The password to use when logging in to the remote machine.
 
 Any other tokens, as described in
 .BR ftp (1),
-are ignored. An entry must supply both a
+are ignored. An entry that supplies a
 .B login
-and a
+and no
 .B password
-before cadaver will use either.
+is used for the login, and only the password is asked for.
+
+A quote character quotes only where it opens a value, which is how a
+value containing a space is written; inside one it is an ordinary
+character. There is no escape, so a value that has to begin with a
+quote character cannot be spelled.
+
+The host name is compared without regard to case.
 .SH EXIT STATUS
-A session exits 0 whether the commands in it succeeded or not, so the
-transcript is the only indication. See the
-.B TODO
-file in the distribution.
+.IP 0
+Every command succeeded, or
+.B \-\-help
+or
+.B \-\-version
+was asked for.
+.IP "1\-125"
+That many commands failed. The count is capped at 125 so that it cannot
+be read as a shell's signalled exit.
+.IP 2
+The command line could not be understood, and nothing was executed. A
+usage error and two failed commands share this status; nothing ran in
+the first case, which is what tells them apart.
+.IP "128+\fIn\fR"
+The session was ended by signal
+.IR n .
 .SH EXAMPLES
 .IP "cadaver http://myserver.example.com/"
 Connect to myserver.example.com and open the root collection.

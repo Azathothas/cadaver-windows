@@ -44,12 +44,12 @@ Check it runs:
 ```
 
 ```
-cadaver 0.28-win1
-neon 0.37.1: Bundled build, Expat 2.8.1, LFS, OpenSSL 3.6.3 9 Jun 2026 (thread-safe).
+cadaver 0.28-win2
+neon 0.37.1: Bundled build, Expat 2.8.3, LFS, OpenSSL 3.6.3 9 Jun 2026 (thread-safe).
 readline 8.3
 ```
 
-Release tags look like `v0.28-win1`. The `0.28` is the upstream cadaver
+Release tags look like `v0.28-win2`. The `0.28` is the upstream cadaver
 version this fork tracks; the suffix counts releases of the fork against
 it. Every release bundles neon 0.37.1.
 
@@ -120,10 +120,11 @@ make -f Makefile.w32 STATIC=1
 
 That links the libraries in statically, so the result depends only on
 DLLs that ship with Windows. This is how the released binaries are
-built. It is correspondingly larger: 10069228 bytes (9.6 MiB) against
-1461364 bytes (1.4 MiB) dynamically linked, measured against OpenSSL
+built. It is correspondingly larger: 10146171 bytes (9.7 MiB) against
+1534462 bytes (1.5 MiB) dynamically linked, measured against OpenSSL
 3.6.3, expat 2.8.1 and readline 8.3. Expect a different exact figure
-from a different toolchain.
+from a different toolchain: the 0.28-win2 release, built by CI against
+expat 2.8.3, is 10125933 bytes (9.7 MiB).
 
 If those libraries live outside the toolchain, point `PREFIX` at a
 sysroot providing all four:
@@ -290,8 +291,8 @@ open https://dav.example.com/path/
 ```
 
 `.netrc` in the same directory supplies credentials, in the format
-`ftp(1)` uses. Both a `login` and a `password` line are needed for a
-machine before cadaver will use either.
+`ftp(1)` uses. An entry with a `login` and no `password` supplies the
+login, and only the password is asked for.
 
 ## Options
 

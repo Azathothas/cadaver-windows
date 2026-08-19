@@ -76,11 +76,18 @@ default on Windows, waits already.
 
 -> Can I use it in a script?
 
-Yes, with one caveat: cadaver exits 0 whether the commands worked or
-not, so you have to read the output. AGENTS.md explains how, and TODO
-records fixing the exit status as the first thing to do.
+Yes. The exit status is 0 if every command succeeded and the number
+that failed otherwise, so a script can branch on it without reading
+anything:
 
   cadaver -r commands.txt https://dav.example.com/path/ < /dev/null
+
+For the detail, --json writes one object describing the whole session
+to standard output and nothing else, and --trace dumps every request
+and response tagged with the command that caused it.  AGENTS.md
+documents the JSON as a contract.
+
+  cadaver --json --trace=wire.log -r commands.txt URL > result.json
 
 
 -> The server works with other WebDAV clients but cadaver says
