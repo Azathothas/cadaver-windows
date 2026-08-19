@@ -22,8 +22,11 @@
 #                 input is at end of file, as a script's would be
 #   NAME.servers  the servers the session applies to, one per line.
 #                 Without it the session runs against both
-#   NAME.check    a shell snippet run afterwards with $WORK set, for
-#                 what a transcript cannot show
+#   NAME.check    a shell snippet run afterwards with $WORK set to the
+#                 session's working directory and $RAW to the transcript
+#                 before tests/normalise.py touched it, for what a
+#                 transcript cannot show or has had replaced.  $PYTHON
+#                 is an interpreter
 #
 # All four go through tests/expand.py, so @WORK@ and @EDITOR@ mean the
 # same in them as in the session script.
@@ -268,7 +271,8 @@ for name in $SESSIONS; do
     # with $WORK set, for the things a transcript cannot show -- that a
     # downloaded file is byte for byte what was uploaded, for instance.
     if [ -f "tests/sessions/$name.check" ]; then
-        if ! ( WORK="$WORKABS"; export WORK
+        if ! ( WORK="$WORKABS"; RAW="$OUTABS/$name.raw"
+               export WORK RAW
                # shellcheck source=/dev/null
                . "$srcdir/tests/sessions/$name.check" ) \
                > "$OUT/$name.checklog" 2>&1; then

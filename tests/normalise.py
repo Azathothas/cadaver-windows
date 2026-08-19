@@ -73,6 +73,13 @@ SUBSTITUTIONS = [
     # The progress indicator emits one dot per transfer callback, and
     # how many of those a transfer takes is the socket's business.
     (re.compile(r"\[\.+"), "[.."),
+    # What `bench' reports is a measurement: it differs between runs by
+    # design, and tests/bench_check.py is what looks at it.  The byte
+    # counts and the iteration count are not measurements and stay.
+    (re.compile(r"min [0-9.]+ ms, median [0-9.]+ ms, max [0-9.]+ ms"),
+     "min <MS> ms, median <MS> ms, max <MS> ms"),
+    (re.compile(r"in [0-9.]+ s wall clock, [0-9.]+ MiB/s"),
+     "in <SECONDS> s wall clock, <RATE> MiB/s"),
     (HTTP_DATE, "<DATE>"),
     (DATE, "<DATE>"),
 ]
@@ -124,6 +131,14 @@ JSON_VOLATILE = {
     "started": "<DATE>",
     "token": "<TOKEN>",
     "version": "<VERSION>",
+    # `bench' only.  The byte counts and the iteration count next to
+    # these are exact and stay, so a change in what bench transfers
+    # still shows up here.
+    "min_ms": "<MS>",
+    "median_ms": "<MS>",
+    "max_ms": "<MS>",
+    "seconds": "<SECONDS>",
+    "mib_per_second": "<RATE>",
 }
 
 # Response headers whose value is the server's, not cadaver's.

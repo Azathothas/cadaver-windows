@@ -25,6 +25,10 @@
 #include <time.h>
 #include <sys/types.h>
 
+#ifdef HAVE_SYS_TIME_H
+#include <sys/time.h>
+#endif
+
 #include <ne_basic.h>
 #include <ne_string.h>
 #include <ne_uri.h>
@@ -111,6 +115,37 @@ int iso8601_utc(time_t when, char *buf, size_t buflen)
     }
 
     return 1;
+}
+
+double cad_now_seconds(void)
+{
+#if defined(HAVE_GETTIMEOFDAY) && defined(HAVE_SYS_TIME_H)
+    struct timeval tv;
+
+    if (gettimeofday(&tv, NULL) == 0)
+        return (double)tv.tv_sec + (double)tv.tv_usec / 1000000.0;
+#endif
+    return 0.0;
+}
+
+void cad_now_iso8601(char *buf, size_t buflen)
+{
+#if defined(HAVE_GETTIMEOFDAY) && defined(HAVE_SYS_TIME_H)
+    struct timeval tv;
+    struct tm *utc;
+    time_t secs;
+    char stamp[32];
+
+    if (gettimeofday(&tv, NULL) == 0
+        && (secs = (time_t)tv.tv_sec, (utc = gmtime(&secs)) != NULL)
+        && strftime(stamp, sizeof stamp, "%Y-%m-%dT%H:%M:%S", utc) != 0) {
+        /* tv_usec is microseconds; truncated rather than rounded. */
+        if (ne_snprintf(buf, buflen, "%s.%03ldZ", stamp,
+                        (long)(tv.tv_usec / 1000)) != 0)
+            return;
+    }
+#endif
+    if (buflen) buf[0] = '\0';
 }
 
 void xml_escape(ne_buffer *buf, const char *str)

@@ -52,6 +52,14 @@ int cad_get_range(const char *uri_path, ne_content_range *range, int fd);
 /* PUT the rest of `fd', from wherever it is now, to `uri_path'. */
 int cad_put(const char *uri_path, int fd);
 
+/* PUT `length' bytes of `buffer'.  For `bench', which measures what the
+ * connection does and has no reason to put a local disk in the way. */
+int cad_put_buffer(const char *uri_path, const char *buffer, size_t length);
+
+/* GET `uri_path' and throw the body away, counting it into `*bytes'.
+ * Also for `bench': the point is how fast the bytes arrive. */
+int cad_get_discard(const char *uri_path, ne_off_t *bytes);
+
 /* Whether the last transfer stopped because of Ctrl-C rather than
  * because of the server.  Cleared when the next one starts. */
 int cad_transfer_interrupted(void);

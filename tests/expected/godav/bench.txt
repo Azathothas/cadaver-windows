@@ -1,0 +1,145 @@
+
+{
+  "tool": "cadaver",
+  "version": "<VERSION>",
+  "target": "http://127.0.0.1:<PORT>/bench/",
+  "started": "<DATE>",
+  "duration": "<DURATION>",
+  "commands": [
+    {
+      "command": "open",
+      "args": [
+        "http://127.0.0.1:<PORT>/bench/"
+      ],
+      "target": null,
+      "status": "ok",
+      "duration": "<DURATION>",
+      "output": [
+        ""
+      ]
+    },
+    {
+      "command": "bench",
+      "args": [
+        "64K",
+        "2"
+      ],
+      "target": "/bench/cadaver-bench.dat",
+      "status": "ok",
+      "duration": "<DURATION>",
+      "benchmark": {
+        "target": "/bench/",
+        "started": "<DATE>",
+        "iterations": 2,
+        "payload_bytes": 65536,
+        "latency": {
+          "op": "PROPFIND",
+          "samples": 2,
+          "min_ms": "<MS>",
+          "median_ms": "<MS>",
+          "max_ms": "<MS>"
+        },
+        "upload": {
+          "bytes": 131072,
+          "seconds": "<SECONDS>",
+          "mib_per_second": "<RATE>"
+        },
+        "download": {
+          "bytes": 131072,
+          "seconds": "<SECONDS>",
+          "mib_per_second": "<RATE>"
+        }
+      },
+      "output": [
+        "Benchmarking `/bench/': succeeded.",
+        "  started    <DATE>",
+        "  payload    65536 bytes (64.0 KiB), 2 iterations",
+        "  PROPFIND   min <MS> ms, median <MS> ms, max <MS> ms over 2 samples",
+        "  upload     131072 bytes (128.0 KiB) in <SECONDS> s wall clock, <RATE> MiB/s",
+        "  download   131072 bytes (128.0 KiB) in <SECONDS> s wall clock, <RATE> MiB/s"
+      ]
+    },
+    {
+      "command": "bench",
+      "args": [
+        "notasize"
+      ],
+      "target": null,
+      "status": "failed",
+      "duration": "<DURATION>",
+      "context": "`notasize' is not a size; give a number of bytes, optionally with a K, M or G suffix.",
+      "output": [
+        "Benchmarking `/bench/': failed:",
+        "`notasize' is not a size; give a number of bytes, optionally with a K, M or G suffix."
+      ]
+    },
+    {
+      "command": "bench",
+      "args": [
+        "64K",
+        "0"
+      ],
+      "target": null,
+      "status": "failed",
+      "duration": "<DURATION>",
+      "context": "`0' is not a count between 1 and 1000.",
+      "output": [
+        "Benchmarking `/bench/': failed:",
+        "`0' is not a count between 1 and 1000."
+      ]
+    },
+    {
+      "command": "put",
+      "args": [
+        "hello.txt",
+        "cadaver-bench.dat"
+      ],
+      "target": "/bench/cadaver-bench.dat",
+      "status": "ok",
+      "duration": "<DURATION>",
+      "output": [
+        "Uploading hello.txt to `/bench/cadaver-bench.dat': succeeded."
+      ]
+    },
+    {
+      "command": "bench",
+      "args": [],
+      "target": null,
+      "status": "failed",
+      "duration": "<DURATION>",
+      "context": "`cadaver-bench.dat' already exists; `bench' writes and deletes that name and will not touch one it did not create.",
+      "output": [
+        "Benchmarking `/bench/': failed:",
+        "`cadaver-bench.dat' already exists; `bench' writes and deletes that name and will not touch one it did not create."
+      ]
+    },
+    {
+      "command": "delete",
+      "args": [
+        "cadaver-bench.dat"
+      ],
+      "target": "/bench/cadaver-bench.dat",
+      "status": "ok",
+      "duration": "<DURATION>",
+      "output": [
+        "Deleting `/bench/cadaver-bench.dat': succeeded."
+      ]
+    },
+    {
+      "command": "quit",
+      "args": [],
+      "target": null,
+      "status": "ok",
+      "duration": "<DURATION>",
+      "output": [
+        ""
+      ]
+    }
+  ],
+  "summary": {
+    "total": 8,
+    "ok": 5,
+    "failed": 3
+  }
+}
+-- cadaver exited 3 --

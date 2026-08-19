@@ -233,4 +233,23 @@ void res_path(const char *path);
 /* One option and its value, from `set' with no argument. */
 void res_option(const char *name, const char *value);
 
+/* What `bench' measured.  Byte counts are exact; durations are
+ * wall-clock seconds, reported to millisecond resolution; rates are
+ * MiB/s, powers of 1024.  Every field is filled in before this is
+ * called, because a benchmark that did not finish reports the failure
+ * instead of a partial measurement. */
+struct bench_result {
+    const char *target;         /* the collection measured, a URI path */
+    const char *started;        /* ISO 8601 UTC, or "" if unreadable */
+    const char *latency_op;     /* the method the samples timed */
+    int iterations;
+    ne_off_t payload_bytes;
+    int latency_samples;
+    double latency_min, latency_median, latency_max;   /* seconds */
+    ne_off_t upload_bytes, download_bytes;
+    double upload_seconds, download_seconds;
+};
+
+void res_benchmark(const struct bench_result *result);
+
 #endif /* CAD_OUTPUT_H */

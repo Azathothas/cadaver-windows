@@ -121,6 +121,10 @@ static int write_block(int fd, const char *block, ssize_t len)
     return NE_OK;
 }
 
+/* Where a response body is counted, for the callers that want the size
+ * rather than the bytes.  NULL when nobody is counting. */
+static ne_off_t *body_counter;
+
 /* The body of a response, block by block, into `fd' or discarded when
  * `fd' is negative.  Returns an NE_* code. */
 static int read_body(ne_request *req, int fd)
@@ -130,6 +134,7 @@ static int read_body(ne_request *req, int fd)
 
     while ((len = ne_read_response_block(req, buf, sizeof buf)) > 0) {
         if (interrupted) return say_interrupted();
+        if (body_counter) *body_counter += len;
         if (fd >= 0 && write_block(fd, buf, len) != NE_OK) return NE_ERROR;
     }
 
@@ -188,6 +193,47 @@ int cad_get(const char *uri_path, int fd)
         ret = NE_ERROR;
 
     if (ret != NE_OK) ne_close_connection(session.sess);
+
+    ne_request_destroy(req);
+    interrupt_end();
+
+    return ret;
+}
+
+int cad_get_discard(const char *uri_path, ne_off_t *bytes)
+{
+    ne_off_t counted = 0;
+    int ret;
+
+    body_counter = &counted;
+    ret = cad_get(uri_path, -1);
+    body_counter = NULL;
+
+    if (bytes) *bytes = counted;
+
+    return ret;
+}
+
+int cad_put_buffer(const char *uri_path, const char *buffer, size_t length)
+{
+    ne_request *req;
+    int ret;
+
+    interrupt_begin();
+    req = ne_request_create(session.sess, "PUT", uri_path);
+
+    ne_lock_using_resource(req, uri_path, 0);
+    ne_lock_using_parent(req, uri_path);
+
+    ne_set_request_body_buffer(req, buffer, length);
+
+    ret = ne_request_dispatch(req);
+
+    if (ret == NE_OK && ne_get_status(req)->klass != 2)
+        ret = NE_ERROR;
+
+    if (interrupted) ret = say_interrupted();
+    else if (ret != NE_OK) ne_close_connection(session.sess);
 
     ne_request_destroy(req);
     interrupt_end();

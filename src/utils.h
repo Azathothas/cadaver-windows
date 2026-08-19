@@ -37,6 +37,18 @@ char *format_time(time_t when);
  * not either. */
 int iso8601_utc(time_t when, char *buf, size_t buflen);
 
+/* Seconds since an arbitrary fixed point, or 0.0 where the clock could
+ * not be read.  Only differences between two readings mean anything.
+ * Wall-clock, so a duration measured with it includes server and
+ * network time, which for a request is most of it. */
+double cad_now_seconds(void);
+
+/* Writes the current time into `buf' as an ISO 8601 UTC timestamp with
+ * millisecond precision and a trailing Z, sub-second digits truncated
+ * rather than rounded so the stamp never names a moment that had not
+ * happened yet.  Leaves `buf' empty if the clock could not be read. */
+void cad_now_iso8601(char *buf, size_t buflen);
+
 /* Appends `str' to `buf' with the five characters that are not
  * themselves in XML character data replaced by entity references.  neon
  * has no such helper: ne_locks.c concatenates the lock owner into the

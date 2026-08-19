@@ -94,6 +94,7 @@ struct command_rec {
     ne_buffer *output;        /* what it printed */
     /* Structured detail, each a comma-separated run of JSON values. */
     ne_buffer *listing, *properties, *headers, *locks, *options;
+    ne_buffer *benchmark;     /* one object, not a run of values */
     char *path;               /* pwd and lpwd */
     int http_status;          /* head */
     struct command_rec *next;
@@ -119,43 +120,11 @@ static int req_code, req_made;
  *
  * Durations are wall clock, so they include server and network time.
  * There is nothing else worth reporting for a command whose work is a
- * request. */
+ * request.  The two readings themselves are in src/utils.c, because
+ * `bench' needs the same clock. */
 
-/* Seconds since an arbitrary fixed point, or 0.0 if unavailable. */
-static double now_seconds(void)
-{
-#if defined(HAVE_GETTIMEOFDAY) && defined(HAVE_SYS_TIME_H)
-    struct timeval tv;
-
-    if (gettimeofday(&tv, NULL) == 0)
-        return (double)tv.tv_sec + (double)tv.tv_usec / 1000000.0;
-#endif
-    return 0.0;
-}
-
-/* Writes the current time into `buf' as an ISO 8601 UTC timestamp with
- * millisecond precision, e.g. 2026-08-19T13:04:54.429Z.  Leaves `buf'
- * empty if the time could not be read. */
-static void now_iso8601(char *buf, size_t buflen)
-{
-#if defined(HAVE_GETTIMEOFDAY) && defined(HAVE_SYS_TIME_H)
-    struct timeval tv;
-    struct tm *utc;
-    time_t secs;
-    char stamp[32];
-
-    if (gettimeofday(&tv, NULL) == 0
-        && (secs = (time_t)tv.tv_sec, (utc = gmtime(&secs)) != NULL)
-        && strftime(stamp, sizeof stamp, "%Y-%m-%dT%H:%M:%S", utc) != 0) {
-        /* tv_usec is microseconds; truncate rather than round, so the
-         * stamp never names a moment that had not happened yet. */
-        if (ne_snprintf(buf, buflen, "%s.%03ldZ", stamp,
-                        (long)(tv.tv_usec / 1000)) != 0)
-            return;
-    }
-#endif
-    if (buflen) buf[0] = '\0';
-}
+#define now_seconds() cad_now_seconds()
+#define now_iso8601(buf, len) cad_now_iso8601((buf), (len))
 
 /* --- Where output goes --------------------------------------------
  *
@@ -777,6 +746,77 @@ void res_path(const char *path)
     if (cur && path && !cur->path) cur->path = ne_strdup(path);
 }
 
+/* Seconds to millisecond resolution, the way put_duration() writes
+ * every other duration in the document. */
+static void detail_seconds(ne_buffer *b, const char *key, double seconds)
+{
+    char num[64];
+
+    if (seconds < 0) seconds = 0;
+    ne_snprintf(num, sizeof num, ",\"%s\":%.3f", key, seconds);
+    ne_buffer_zappend(b, num);
+}
+
+static void detail_rate(ne_buffer *b, ne_off_t bytes, double seconds)
+{
+    char num[64];
+    double rate = seconds > 0.0
+        ? (double)bytes / (1024.0 * 1024.0) / seconds : 0.0;
+
+    ne_snprintf(num, sizeof num, ",\"mib_per_second\":%.2f", rate);
+    ne_buffer_zappend(b, num);
+}
+
+void res_benchmark(const struct bench_result *result)
+{
+    ne_buffer *b;
+    char num[128];
+
+    if (!cur || cur->benchmark) return;
+
+    b = cur->benchmark = ne_buffer_create();
+
+    ne_buffer_czappend(b, "{\"target\":");
+    json_string(b, result->target ? result->target : "");
+    ne_buffer_czappend(b, ",\"started\":");
+    if (result->started && result->started[0]) json_string(b, result->started);
+    else ne_buffer_czappend(b, "null");
+
+    ne_snprintf(num, sizeof num,
+                ",\"iterations\":%d,\"payload_bytes\":%" NE_FMT_NE_OFF_T,
+                result->iterations, result->payload_bytes);
+    ne_buffer_zappend(b, num);
+
+    ne_buffer_czappend(b, ",\"latency\":{\"op\":");
+    json_string(b, result->latency_op ? result->latency_op : "");
+    ne_snprintf(num, sizeof num, ",\"samples\":%d", result->latency_samples);
+    ne_buffer_zappend(b, num);
+    /* Milliseconds here rather than seconds: a round trip is the one
+     * measurement in this document that is routinely under a
+     * millisecond, and %.3f seconds would report it as zero. */
+    ne_snprintf(num, sizeof num,
+                ",\"min_ms\":%.3f,\"median_ms\":%.3f,\"max_ms\":%.3f}",
+                result->latency_min * 1000.0, result->latency_median * 1000.0,
+                result->latency_max * 1000.0);
+    ne_buffer_zappend(b, num);
+
+    ne_snprintf(num, sizeof num, ",\"upload\":{\"bytes\":%" NE_FMT_NE_OFF_T,
+                result->upload_bytes);
+    ne_buffer_zappend(b, num);
+    detail_seconds(b, "seconds", result->upload_seconds);
+    detail_rate(b, result->upload_bytes, result->upload_seconds);
+    ne_buffer_czappend(b, "}");
+
+    ne_snprintf(num, sizeof num, ",\"download\":{\"bytes\":%" NE_FMT_NE_OFF_T,
+                result->download_bytes);
+    ne_buffer_zappend(b, num);
+    detail_seconds(b, "seconds", result->download_seconds);
+    detail_rate(b, result->download_bytes, result->download_seconds);
+    ne_buffer_czappend(b, "}");
+
+    ne_buffer_czappend(b, "}");
+}
+
 void res_option(const char *name, const char *value)
 {
     ne_buffer *b;
@@ -1019,6 +1059,10 @@ static void put_command(FILE *fp, const struct command_rec *c)
     put_detail(fp, "headers", c->headers, "{", "}");
     put_detail(fp, "locks", c->locks, "[", "]");
     put_detail(fp, "options", c->options, "{", "}");
+    /* Already an object, so it is written as it stands rather
+     * than wrapped the way the comma-separated runs above are. */
+    if (c->benchmark)
+        fprintf(fp, ",\"benchmark\":%s", c->benchmark->data);
 
     if (c->path) {
         fputs(",\"path\":", fp);

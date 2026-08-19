@@ -74,6 +74,7 @@
 #include "system.h"
 #include "cadaver.h"
 #include "commands.h"
+#include "bench.h"
 #include "options.h"
 #include "transfer.h"
 #include "utils.h"
@@ -100,7 +101,7 @@ const static struct {
 #if 0
 C(propedit), 
 #endif
-C(propnames), C(edit), C(rget), C(rput),
+C(propnames), C(edit), C(rget), C(rput), C(bench),
 #undef C
     /* And now the real aliases */
     { cmd_less, "more" }, { cmd_mkcol, "mkdir" }, 
@@ -2144,6 +2145,15 @@ const struct command commands[] = {
       N_("propset res propname value"),
       N_("Set property on resource") },
 
+    { cmd_bench, "bench", true, 0, 2, parmscope_none, "n",
+      T2(execute_bench), N_("bench [size [count]]"),
+      N_("Measure the round trip time and the transfer rate\n\n"
+         " The size takes a K, M or G suffix, all powers of 1024, and\n"
+         " defaults to 1M; the count is how many times each part is\n"
+         " repeated and defaults to 3.  A generated payload is written\n"
+         " to cadaver-bench.dat in the current collection, read back\n"
+         " and deleted.  Rates are MiB/s and durations are wall clock,\n"
+         " so they include server and network time.\n") },
     { cmd_search, "search", true, 1, CMD_VARY, parmscope_remote, "n", TV(execute_search),
       N_("search query"), 
       N_("DASL Search resource in current collection\n\n"

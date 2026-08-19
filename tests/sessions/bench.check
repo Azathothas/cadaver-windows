@@ -1,0 +1,3 @@
+# The measurements are gone from the transcript by the time it is
+# compared; $RAW still has them.
+"$PYTHON" tests/bench_check.py "$RAW" 65536 2

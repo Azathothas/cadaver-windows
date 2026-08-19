@@ -34,7 +34,7 @@ TARGET = cadaver$(EXEEXT)
 TARGET_DEPS = @TARGET_DEPS@
 OBJECTS = src/cadaver.o src/common.o src/commands.o src/ls.o \
 	src/cmdline.o src/options.o src/output.o src/utils.o src/edit.o \
-	src/version.o src/search.o src/transfer.o
+	src/version.o src/search.o src/transfer.o src/bench.o
 LIBOBJS = lib/basename.o lib/glob.o lib/rpmatch.o \
 	lib/yesno.o lib/getpass.o lib/mkstemp.o lib/system.o \
 	@LIBOBJS@
@@ -129,6 +129,7 @@ src/output.o: src/output.c src/output.h src/cadaver.h src/commands.h \
 	src/utils.h config.h
 src/utils.o: src/utils.c src/utils.h src/cadaver.h config.h
 src/transfer.o: src/transfer.c src/transfer.h src/cadaver.h src/common.h config.h
+src/bench.o: src/bench.c src/bench.h src/cadaver.h src/output.h src/transfer.h src/utils.h config.h
 src/version.o: src/version.c src/utils.h src/cadaver.h config.h
 lib/glob.o: lib/glob.c lib/glob.h config.h
 lib/netrc.o: lib/netrc.c lib/netrc.h config.h

@@ -59,7 +59,7 @@ enum command_id {
     cmd_propget, cmd_propset, cmd_propdel, cmd_chexec, cmd_edit, cmd_logout,
     cmd_describe, cmd_search, cmd_version, cmd_checkin, cmd_checkout,
     cmd_uncheckout, cmd_history, cmd_label, cmd_head, cmd_resumeget,
-    cmd_rget, cmd_rput,
+    cmd_rget, cmd_rput, cmd_bench,
     cmd_unknown
 /* DON'T FORGET TO ADD A NEW COMMAND ALIAS WHEN YOU ADD A NEW COMMAND */
 };

@@ -83,9 +83,9 @@ Available commands:
  cat        delete     rmcol      copy       move       rename     lock       
  unlock     discover   steal      showlocks  version    checkin    checkout   
  uncheckout history    label      propnames  chexec     propget    propdel    
- propset    search     set        open       close      echo       quit       
- unset      lcd        lls        lpwd       logout     help       describe   
- about      
+ propset    bench      search     set        open       close      echo       
+ quit       unset      lcd        lls        lpwd       logout     help       
+ describe   about      
 Aliases: rm=delete, mkdir=mkcol, mv=move, cp=copy, more=less, quit=exit=bye
  `ls [path]'   List contents of current [or other] collection
 This command can only be used when connected to a server.

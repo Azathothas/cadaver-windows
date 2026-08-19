@@ -1,0 +1,14 @@
+# Throughput and latency.  What bench reports is measured, so it
+# differs from one run to the next: tests/normalise.py replaces the
+# numbers and tests/bench_check.py looks at the ones still in the raw
+# transcript.  --json, because the shape is the part worth pinning.
+bench 64K 2
+# A size that is not one, and a count that is not one.
+bench notasize
+bench 64K 0
+# bench writes and deletes one name, and will not touch one it did not
+# create.
+put hello.txt cadaver-bench.dat
+bench
+delete cadaver-bench.dat
+quit
