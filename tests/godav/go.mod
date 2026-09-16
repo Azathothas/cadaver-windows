@@ -2,4 +2,4 @@ module godav
 
 go 1.26.5
 
-require golang.org/x/net v0.58.0
+require golang.org/x/net v0.59.0
